@@ -1,83 +1,13 @@
-import {EditorView, Decoration, type DecorationSet, WidgetType} from '@codemirror/view';
 import {StateField, EditorState} from '@codemirror/state';
+import {EditorView, Decoration, DecorationSet, WidgetType} from '@codemirror/view';
 import {syntaxTree} from '@codemirror/language';
-import hljs from 'highlight.js';
-import errorImageGeneric from '@/assets/error-image-generic.png';
+import {RangeSetBuilder} from './range-set-builder';
+import {BlockWidget} from "@/extensions/markdown-syntax-hiding/block-widget.ts";
 
 const hiddenMarkdown = Decoration.mark({class: 'cm-hidden-markdown'});
 const visibleMarkdown = Decoration.mark({class: 'cm-visible-markdown'});
 
-class BlockWidget extends WidgetType {
-    private static imageCache: Map<string, HTMLImageElement> = new Map();
-
-    constructor(readonly content: string, readonly type: 'blockquote' | 'blockcode' | 'image', readonly language?: string, readonly alt?: string, readonly src?: string) {
-        super();
-    }
-
-    toDOM() {
-        const wrap = document.createElement("div");
-        wrap.className = `cm-${this.type}-widget`;
-        const lines = this.content.split('\n');
-        const processedLines = lines.map(line => {
-            return this.type === 'blockquote' ? line.replace(/^>\s?/, '') : line;
-        });
-        if (this.type === 'blockcode') {
-            const pre = document.createElement("pre");
-            const code = document.createElement("code");
-            if (this.language) {
-                code.className = `language-${this.language}`;
-                wrap.setAttribute('data-language', this.language);
-            }
-            code.textContent = processedLines.join('\n');
-            if (this.language) {
-                hljs.highlightElement(code);
-            }
-            pre.appendChild(code);
-            wrap.appendChild(pre);
-        } else if (this.type === 'image') {
-            if (this.src) {
-                let img: HTMLImageElement;
-                if (BlockWidget.imageCache.has(this.src)) {
-                    img = BlockWidget.imageCache.get(this.src)!.cloneNode() as HTMLImageElement;
-                } else {
-                    img = document.createElement("img");
-                    img.src = this.src;
-                    img.alt = this.alt || '';
-                    img.onload = () => {
-                        BlockWidget.imageCache.set(this.src!, img);
-                    };
-                    img.onerror = () => {
-                        console.error(`Failed to load image: ${this.src}`);
-                        img.src = errorImageGeneric;
-                        img.alt = 'Failed to load image';
-                        BlockWidget.imageCache.set(this.src!, img);
-                    }
-                }
-                wrap.appendChild(img);
-            }
-
-            if (this.alt) {
-                const caption = document.createElement("div");
-                caption.className = 'cm-image-caption';
-                caption.textContent = this.alt;
-                wrap.appendChild(caption);
-            }
-        } else {
-            wrap.textContent = processedLines.join('\n');
-        }
-        return wrap;
-    }
-
-    ignoreEvent() {
-        return false;
-    }
-
-    eq(other: BlockWidget) {
-        return this.content === other.content && this.type === other.type && this.language === other.language && this.alt === other.alt && this.src === other.src;
-    }
-}
-
-const markdownSyntaxHidingField = StateField.define<DecorationSet>({
+export const markdownSyntaxHidingField = StateField.define<DecorationSet>({
     create(_: EditorState) {
         return Decoration.none;
     },
@@ -89,7 +19,7 @@ const markdownSyntaxHidingField = StateField.define<DecorationSet>({
         syntaxTree(state).iterate({
             enter: (node) => {
                 if (
-                    ['Emphasis', 'StrongEmphasis', 'InlineCode', 'FencedCode', 'ATXHeading1', 'ATXHeading2', 'ATXHeading3', 'Blockquote', 'Link', 'Image'].includes(node.type.name)
+                    ['Emphasis', 'StrongEmphasis', 'InlineCode', 'FencedCode', 'ATXHeading1', 'ATXHeading2', 'ATXHeading3', 'Blockquote', 'Link', 'Image', 'Strikethrough', 'Mark'].includes(node.type.name)
                 ) {
                     const start = node.from;
                     const end = node.to;
@@ -218,6 +148,46 @@ const markdownSyntaxHidingField = StateField.define<DecorationSet>({
                                 builder.add(start + 2 + alt.length, end, decorationType); // Hide '](...)'
                             }
                         }
+                    } else if (node.type.name === 'Strikethrough') {
+                        if (!isSelected) {
+                            const strikethroughContent = state.doc.sliceString(start + 2, end - 2);
+                            const replacement = Decoration.replace({
+                                widget: new class extends WidgetType {
+                                    toDOM() {
+                                        const span = document.createElement("span");
+                                        span.className = "cm-strikethrough-widget";
+                                        span.textContent = strikethroughContent;
+                                        return span;
+                                    }
+                                    eq(other: this) { return other.toDOM().textContent === this.toDOM().textContent; }
+                                    ignoreEvent() { return false; }
+                                }
+                            });
+                            builder.add(start, end, replacement);
+                        } else {
+                            builder.add(start, start + 2, decorationType);
+                            builder.add(end - 2, end, decorationType);
+                        }
+                    } else if (node.type.name === 'Mark') {
+                        if (!isSelected) {
+                            const highlightContent = state.doc.sliceString(start + 2, end - 2);
+                            const replacement = Decoration.replace({
+                                widget: new class extends WidgetType {
+                                    toDOM() {
+                                        const span = document.createElement("span");
+                                        span.className = "cm-highlight-widget";
+                                        span.textContent = highlightContent;
+                                        return span;
+                                    }
+                                    eq(other: this) { return other.toDOM().textContent === this.toDOM().textContent; }
+                                    ignoreEvent() { return false; }
+                                }
+                            });
+                            builder.add(start, end, replacement);
+                        } else {
+                            builder.add(start, start + 2, decorationType);
+                            builder.add(end - 2, end, decorationType);
+                        }
                     } else {
                         builder.add(start, start + 1, decorationType);
                         builder.add(end - 1, end, decorationType);
@@ -230,113 +200,3 @@ const markdownSyntaxHidingField = StateField.define<DecorationSet>({
     },
     provide: (f) => EditorView.decorations.from(f),
 });
-
-export function markdownSyntaxHiding() {
-    console.log('markdownSyntaxHiding');
-
-
-    return [
-        markdownSyntaxHidingField,
-        EditorView.baseTheme({
-            '.cm-hidden-markdown': {display: 'none'},
-            '.cm-visible-markdown': {color: 'darkgray'},
-            '.cm-blockquote-widget, .cm-blockcode-widget': {
-                display: 'block',
-                width: '100%',
-                border: '1px solid #ccc',
-                borderRadius: '4px',
-                padding: '4px 8px',
-                margin: '4px 0',
-                lineHeight: '1.2',
-                whiteSpace: 'pre-wrap',
-                boxSizing: 'border-box',
-                fontFamily: 'inherit',
-                fontSize: 'inherit',
-            },
-            '.cm-blockquote-widget': {
-                background: '#f9f9f9',
-            },
-            '.cm-blockcode-widget': {
-                fontFamily: 'monospace',
-                background: '#282c34',
-                color: '#abb2bf', // 设置默认文本颜色
-            },
-            '.cm-blockcode-widget pre': {
-                margin: 0,
-                padding: 0,
-            },
-            '.cm-blockcode-widget code': {
-                display: 'block',
-                padding: '1em',
-                overflow: 'auto',
-            },
-            '.cm-blockcode-widget .hljs': {
-                display: 'block',
-                'overflow-x': 'auto',
-                padding: '1em',
-            },
-            '.cm-blockcode-widget .hljs-comment, .cm-blockcode-widget .hljs-quote': {
-                color: '#5c6370',
-                fontStyle: 'italic',
-            },
-            '.cm-blockcode-widget .hljs-doctag, .cm-blockcode-widget .hljs-keyword, .cm-blockcode-widget .hljs-formula': {
-                color: '#c678dd',
-            },
-            '.cm-blockcode-widget .hljs-section, .cm-blockcode-widget .hljs-name, .cm-blockcode-widget .hljs-selector-tag, .cm-blockcode-widget .hljs-deletion, .cm-blockcode-widget .hljs-subst': {
-                color: '#e06c75',
-            },
-            '.cm-blockcode-widget .hljs-literal': {
-                color: '#56b6c2',
-            },
-            '.cm-blockcode-widget .hljs-string, .cm-blockcode-widget .hljs-regexp, .cm-blockcode-widget .hljs-addition, .cm-blockcode-widget .hljs-attribute, .cm-blockcode-widget .hljs-meta-string': {
-                color: '#98c379',
-            },
-            '.cm-blockcode-widget .hljs-built_in, .cm-blockcode-widget .hljs-class .cm-blockcode-widget .hljs-title': {
-                color: '#e6c07b',
-            },
-            '.cm-inline-code-widget': {
-                fontFamily: 'monospace',
-                background: '#f0f0f0',
-                padding: '2px 4px',
-                borderRadius: '3px',
-                display: 'inline-block',
-            },
-            '.cm-link-widget': {
-                textDecoration: 'underline',
-                color: 'lightblue',
-            },
-            '.cm-widgetBuffer': {
-                display: 'none !important',
-            },
-            '.cm-image-widget': {
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                maxWidth: '100%',
-                margin: '4px 0',
-            },
-            '.cm-image-widget img': {
-                maxWidth: '100%',
-                height: 'auto',
-            },
-            '.cm-image-caption': {
-                textAlign: 'center',
-                color: '#777',
-                fontSize: '0.9em',
-                marginTop: '4px',
-            },
-        }),
-    ];
-}
-
-class RangeSetBuilder<T extends Decoration> {
-    private ranges: { from: number; to: number; value: T }[] = [];
-
-    add(from: number, to: number, value: T) {
-        this.ranges.push({from, to, value});
-    }
-
-    finish(): DecorationSet {
-        return Decoration.set(this.ranges.map(({from, to, value}) => value.range(from, to)));
-    }
-}

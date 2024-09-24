@@ -1,5 +1,5 @@
-import { Text } from '@codemirror/state';
-import { EditorView, type PluginValue, ViewPlugin, ViewUpdate } from '@codemirror/view';
+import {EditorView, PluginValue, ViewPlugin, ViewUpdate} from "@codemirror/view";
+import {Text} from "@codemirror/state";
 
 export class FinalNewLinePlugin implements PluginValue {
     constructor(private readonly view: EditorView) {
@@ -37,6 +37,4 @@ export class FinalNewLinePlugin implements PluginValue {
     }
 }
 
-const finalNewLine = ViewPlugin.fromClass(FinalNewLinePlugin);
-
-export default finalNewLine;
+export const finalNewLinePlugin = ViewPlugin.fromClass(FinalNewLinePlugin);

@@ -1,7 +1,6 @@
 import {EditorState} from '@codemirror/state';
 import {EditorView} from '@codemirror/view';
-import {defaultExtensions} from "./extensions/defaultExtensions.ts";
-// import {markdownSyntaxHiding} from "@/extensions/markdownSyntaxHiding.ts";
+import {defaultExtensions} from "./extensions/default-extensions.ts";
 
 class Moondown {
     private view: EditorView;
@@ -9,7 +8,6 @@ class Moondown {
     constructor(element: HTMLElement, initialDoc: string = '') {
         const state = EditorState.create({
             doc: initialDoc,
-            // extensions: [markdownSyntaxHiding()]
             extensions: [...defaultExtensions]
         });
 

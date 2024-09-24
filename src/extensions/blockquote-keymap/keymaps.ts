@@ -1,7 +1,7 @@
-import { Extension } from '@codemirror/state';
-import { EditorView, keymap } from '@codemirror/view';
+import {Extension} from "@codemirror/state";
+import {EditorView, keymap} from "@codemirror/view";
 
-export const blockQuoteKeymap: Extension = keymap.of([
+export const blockquoteKeymapExtension: Extension = keymap.of([
     {
         key: 'Enter',
         run: (view: EditorView) => {

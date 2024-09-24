@@ -8,12 +8,14 @@ import { markdown } from '@codemirror/lang-markdown';
 import {defaultKeymap, history, historyKeymap, indentWithTab} from "@codemirror/commands";
 import { closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
 import {languages} from "@codemirror/language-data";
-import {highlightStyles} from "@/lib/highlightStyles.ts";
-import {correctList} from "@/extensions/correctList.ts";
-import {blockQuoteKeymap} from "@/extensions/blockQuoteKeymap.ts";
-import {markdownSyntaxHiding} from "@/extensions/markdownSyntaxHiding.ts";
+import {highlightStyles} from "@/lib/highlight-styles.ts";
+import {correctList} from "@/extensions/correct-list";
+import {markdownSyntaxHiding} from "@/extensions/markdown-syntax-hiding";
 import {GFM} from "@lezer/markdown";
-import finalNewLine from "@/extensions/finalNewLine.ts";
+import {Mark} from "@/extensions/mark-parser";
+import {blockquoteKeymap} from "@/extensions/blockquote-keymap";
+import {finalNewLine} from "@/extensions/final-new-line";
+import {editorBaseTheme} from "@/theme/base-theme-style.ts";
 
 export const defaultExtensions: Extension[] = [
     // tablePositions,
@@ -24,14 +26,15 @@ export const defaultExtensions: Extension[] = [
     rectangularSelection(),
     indentOnInput(),
     correctList,
-    blockQuoteKeymap,
+    blockquoteKeymap,
     keymap.of([indentWithTab, ...defaultKeymap, ...completionKeymap, ...historyKeymap, ...closeBracketsKeymap]),
     EditorView.lineWrapping,
     markdownSyntaxHiding(),
     markdown({
         codeLanguages: languages,
-        extensions: [GFM],
+        extensions: [GFM, Mark],
         addKeymap: false,
     }),
-    finalNewLine
+    finalNewLine,
+    editorBaseTheme
 ];
