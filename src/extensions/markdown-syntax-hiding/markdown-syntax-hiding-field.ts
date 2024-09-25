@@ -19,7 +19,9 @@ export const markdownSyntaxHidingField = StateField.define<DecorationSet>({
         syntaxTree(state).iterate({
             enter: (node) => {
                 if (
-                    ['Emphasis', 'StrongEmphasis', 'InlineCode', 'FencedCode', 'ATXHeading1', 'ATXHeading2', 'ATXHeading3', 'Blockquote', 'Link', 'Image', 'Strikethrough', 'Mark'].includes(node.type.name)
+                    ['Emphasis', 'StrongEmphasis', 'InlineCode', 'FencedCode', 'ATXHeading1', 'ATXHeading2',
+                        'ATXHeading3', 'ATXHeading4', 'ATXHeading5', 'Blockquote', 'Link', 'Image', 'Strikethrough',
+                        'Mark'].includes(node.type.name)
                 ) {
                     const start = node.from;
                     const end = node.to;

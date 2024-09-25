@@ -16,10 +16,10 @@ import {Mark} from "@/extensions/mark-parser";
 import {blockquoteKeymap} from "@/extensions/blockquote-keymap";
 import {finalNewLine} from "@/extensions/final-new-line";
 import {editorBaseTheme} from "@/theme/base-theme-style.ts";
+import {tableExtension} from "@/extensions/table";
 
 export const defaultExtensions: Extension[] = [
-    // tablePositions,
-    // tableExtension,
+    tableExtension,
     syntaxHighlighting(highlightStyles),
     history(),
     drawSelection(),
