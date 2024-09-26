@@ -5,6 +5,18 @@ import type {ColAlignment, TableEditorOptions} from './types'
 
 import {md2html} from './markdown-to-html'
 import {selectElementContents} from "./select-in-element";
+import tippy, { Instance as TippyInstance } from 'tippy.js';
+import {
+    createIcons,
+    ArrowLeftToLine,
+    ArrowRightToLine,
+    ArrowUpToLine,
+    ArrowDownToLine,
+    Trash2,
+    AlignCenter,
+    AlignLeft,
+    AlignRight
+} from 'lucide';
 
 export default class TableEditor {
     /**
@@ -102,21 +114,12 @@ export default class TableEditor {
     /**
      * The following variables are the various buttons
      */
-    private readonly _alignButtons: HTMLDivElement
-    private readonly _alignLeftButton: HTMLDivElement
-    private readonly _alignCenterButton: HTMLDivElement
-    private readonly _alignRightButton: HTMLDivElement
-
-    private readonly _removeButtons: HTMLDivElement
-    private readonly _removeRowButton: HTMLDivElement
-    private readonly _removeColButton: HTMLDivElement
-
     private readonly _addTopButton: HTMLDivElement
-    private readonly _addBottomButton: HTMLDivElement
     private readonly _addLeftButton: HTMLDivElement
-    private readonly _addRightButton: HTMLDivElement
 
     private _lastMousemoveEvent: MouseEvent | undefined
+
+    private _tippyInstance: TippyInstance | null = null;
 
     /**
      * Creates a new TableHelper.
@@ -152,60 +155,18 @@ export default class TableEditor {
             this._containerElement = document.body
         }
 
-        // CREATE THE TABLE BUTTONS
-        const alignButtonsTpl = document.createElement('div')
-        alignButtonsTpl.classList.add('table-helper-align-button')
-
-        const removeLine = document.createElement('div')
-        removeLine.classList.add('table-helper-remove-button-line')
-
-        const removeButtonsTpl = document.createElement('div')
-        removeButtonsTpl.classList.add('table-helper-remove-button')
-        removeButtonsTpl.appendChild(removeLine.cloneNode(true))
-        removeButtonsTpl.appendChild(removeLine.cloneNode(true))
-        removeButtonsTpl.appendChild(removeLine.cloneNode(true))
-
         const template = document.createElement('div')
-        template.classList.add('table-helper-add-button')
-        template.innerHTML = '+'
-
-        this._alignButtons = document.createElement('div')
-        this._alignButtons.classList.add('table-helper-align-button-container')
+        template.classList.add('table-helper-operate-button')
 
         const alignLine = document.createElement('div')
         alignLine.classList.add('table-helper-align-button-line')
-        alignButtonsTpl.appendChild(alignLine.cloneNode())
-        alignButtonsTpl.appendChild(alignLine.cloneNode())
-        alignButtonsTpl.appendChild(alignLine.cloneNode())
-
-        this._alignLeftButton = alignButtonsTpl.cloneNode(true) as HTMLDivElement
-        this._alignLeftButton.classList.add('align-left')
-        this._alignCenterButton = alignButtonsTpl.cloneNode(true) as HTMLDivElement
-        this._alignCenterButton.classList.add('align-center')
-        this._alignRightButton = alignButtonsTpl.cloneNode(true) as HTMLDivElement
-        this._alignRightButton.classList.add('align-right')
-        this._alignButtons.appendChild(this._alignLeftButton)
-        this._alignButtons.appendChild(this._alignCenterButton)
-        this._alignButtons.appendChild(this._alignRightButton)
-
-        this._removeButtons = document.createElement('div')
-        this._removeButtons.classList.add('table-helper-remove-button-container')
-        this._removeRowButton = removeButtonsTpl.cloneNode(true) as HTMLDivElement
-        this._removeRowButton.classList.add('row')
-        this._removeColButton = removeButtonsTpl.cloneNode(true) as HTMLDivElement
-        this._removeColButton.classList.add('col')
-        this._removeButtons.appendChild(this._removeRowButton)
-        this._removeButtons.appendChild(this._removeColButton)
 
         this._addTopButton = template.cloneNode(true) as HTMLDivElement
         this._addTopButton.classList.add('top')
-        this._addBottomButton = template.cloneNode(true) as HTMLDivElement
-        this._addBottomButton.classList.add('bottom')
+        this._addTopButton.innerHTML = '&#8943;';
         this._addLeftButton = template.cloneNode(true) as HTMLDivElement
         this._addLeftButton.classList.add('left')
-        this._addRightButton = template.cloneNode(true) as HTMLDivElement
-        this._addRightButton.classList.add('right')
-        // END Create buttons
+        this._addLeftButton.innerHTML = '&#8942;';
 
         // Create the Table element
         const table = document.createElement('table')
@@ -226,18 +187,7 @@ export default class TableEditor {
             this._clickHelper(e)
             this._lastMousemoveEvent = e
         })
-        // These buttons are not children of containerElement but also should not
-        // hide the edge buttons, naturally.
-        this._alignButtons.addEventListener('mousemove', e => {
-            this._lastMousemoveEvent = e
-        })
-        this._removeButtons.addEventListener('mousemove', e => {
-            this._lastMousemoveEvent = e
-        })
 
-        // ... but whenever a mousemove event triggers on the DOCUMENT that did not
-        // earlier pass through our container, this means we must hide the edge
-        // buttons.
         this._containerElement.addEventListener('mouseover', (e) => {
             if (this._lastMousemoveEvent !== e) {
                 this._hideAllButtons()
@@ -248,54 +198,211 @@ export default class TableEditor {
         // on the mousedowns, otherwise the table cell will lose focus, thereby
         // triggering the blur event on the table.
         this._addTopButton.addEventListener('mousedown', (e) => {
-            e.preventDefault()
-            this.prependRow()
-            this._options.saveIntent?.(this)
-        })
-        this._addBottomButton.addEventListener('mousedown', (e) => {
-            e.preventDefault()
-            this.appendRow()
-            this._options.saveIntent?.(this)
-        })
+            e.preventDefault();
+            this._showColumnActions();
+        });
         this._addLeftButton.addEventListener('mousedown', (e) => {
             e.preventDefault()
-            this.prependCol()
-            this._options.saveIntent?.(this)
-        })
-        this._addRightButton.addEventListener('mousedown', (e) => {
-            e.preventDefault()
-            this.appendCol()
-            this._options.saveIntent?.(this)
-        })
-        this._alignLeftButton.addEventListener('mousedown', (e) => {
-            e.preventDefault()
-            this.changeColAlignment('left')
-            this._options.saveIntent?.(this)
-        })
-        this._alignCenterButton.addEventListener('mousedown', (e) => {
-            e.preventDefault()
-            this.changeColAlignment('center')
-            this._options.saveIntent?.(this)
-        })
-        this._alignRightButton.addEventListener('mousedown', (e) => {
-            e.preventDefault()
-            this.changeColAlignment('right')
-            this._options.saveIntent?.(this)
-        })
-        this._removeRowButton.addEventListener('mousedown', (e) => {
-            e.preventDefault()
-            this.pluckRow()
-            this._options.saveIntent?.(this)
-        })
-        this._removeColButton.addEventListener('mousedown', (e) => {
-            e.preventDefault()
-            this.pluckCol()
-            this._options.saveIntent?.(this)
+            this._showRowActions()
         })
 
         // Inject the CSS necessary to style the table and buttons.
         this._injectCSS()
     } // END CONSTRUCTOR
+
+    private _showRowActions(): void {
+        if (this._tippyInstance) {
+            this._tippyInstance.destroy();
+        }
+
+        const content = this._createRowActionsTippyContent();
+
+        this._tippyInstance = tippy(this._addLeftButton, {
+            content: content,
+            interactive: true,
+            theme: 'custom',
+            placement: 'right',
+            trigger: 'manual',
+            arrow: true,
+        });
+
+        this._tippyInstance.show();
+    }
+
+    private _createRowActionsTippyContent(): HTMLElement {
+        const container = document.createElement('div');
+        container.style.display = 'flex';
+        container.style.gap = '5px';
+        container.style.padding = '5px';
+
+        const actions = [
+            { icon: 'arrow-up-to-line', title: '在上方插入一列', action: () => this.prependRow() },
+            { icon: 'arrow-down-to-line', title: '在下方插入一列', action: () => this.appendRow() },
+            { icon: 'trash-2', title: '删除本列', action: () => this.pluckRow() },
+        ];
+
+        actions.forEach(({ icon, title, action }) => {
+            const button = document.createElement('button');
+            button.innerHTML = `<i data-lucide="${icon}"></i>`;
+            button.title = title;
+            button.className = 'tippy-button';
+            button.addEventListener('click', () => {
+                action();
+                this._tippyInstance?.hide();
+                this._options.saveIntent?.(this)
+            });
+            container.appendChild(button);
+        });
+
+        setTimeout(() => createIcons({
+            icons: {ArrowUpToLine, ArrowDownToLine, Trash2},
+            attrs: {
+                width: '16',
+                height: '16'
+            }
+        }), 0);
+
+        return container;
+    }
+
+    private _showColumnActions(): void {
+        if (this._tippyInstance) {
+            this._tippyInstance.destroy();
+        }
+
+        const content = this._createColumnActionsTippyContent();
+
+        this._tippyInstance = tippy(this._addTopButton, {
+            content: content,
+            interactive: true,
+            theme: 'custom',
+            placement: 'bottom',
+            trigger: 'manual',
+            arrow: true,
+        });
+
+        this._tippyInstance.show();
+    }
+
+    private _createColumnActionsTippyContent(): HTMLElement {
+        const container = document.createElement('div');
+        container.style.display = 'flex';
+        container.style.gap = '5px';
+        container.style.padding = '5px';
+
+        const actions = [
+            {
+                icon: 'arrow-left-to-line',
+                title: '在左侧插入一列',
+                action: () => {
+                    this.prependCol();
+                    this._tippyInstance?.hide();
+                    this._options.saveIntent?.(this)
+                }
+            },
+            {
+                icon: 'arrow-right-to-line',
+                title: '在右侧插入一列',
+                action: () => {
+                    this.appendCol();
+                    this._tippyInstance?.hide();
+                    this._options.saveIntent?.(this)
+                }
+            },
+            {
+                icon: 'trash-2',
+                title: '删除本列',
+                action: () => {
+                    this.pluckCol();
+                    this._tippyInstance?.hide();
+                    this._options.saveIntent?.(this)
+                }
+            },
+            {
+                icon: 'align-center',
+                title: '对齐方式',
+                action: (event: MouseEvent) => this._showAlignmentOptions(event.currentTarget as HTMLElement) },
+        ];
+
+        actions.forEach(({ icon, title, action }) => {
+            const button = document.createElement('button');
+            button.innerHTML = `<i data-lucide="${icon}"></i>`;
+            button.title = title;
+            button.className = 'tippy-button';
+            button.addEventListener('click', action);
+            container.appendChild(button);
+        });
+
+        setTimeout(() => createIcons({
+            icons: {ArrowLeftToLine, ArrowRightToLine, Trash2, AlignCenter},
+            attrs: {
+                width: '16',
+                height: '16'
+            }
+        }), 0);
+
+        return container;
+    }
+
+    private _showAlignmentOptions(target: HTMLElement): void {
+        const alignmentOptions = document.createElement('div');
+        alignmentOptions.className = 'alignment-options';
+        const alignments = [
+            {
+                icon: 'align-left',
+                title: '左对齐',
+                action: () => {
+                    this.changeColAlignment('left');
+                }
+            },
+            {
+                icon: 'align-center',
+                title: '居中对齐',
+                action: () => {
+                    this.changeColAlignment('center');
+                }
+            },
+            {
+                icon: 'align-right',
+                title: '右对齐',
+                action: () => {
+                    this.changeColAlignment('right');
+                }
+            }
+        ]
+
+        alignments.forEach(align => {
+            const alignButton = document.createElement('button');
+            alignButton.className = 'tippy-button';
+            alignButton.title = align.title;
+            alignButton.innerHTML = `<i data-lucide="${align.icon}"></i>`;
+            alignButton.addEventListener('click', () => {
+                align.action();
+                this._tippyInstance?.hide();
+                this._options.saveIntent?.(this)
+            });
+            alignmentOptions.appendChild(alignButton);
+        });
+
+        const instance = tippy(target, {
+            content: alignmentOptions,
+            interactive: true,
+            theme: 'custom',
+            placement: 'bottom',
+            trigger: 'manual',
+            arrow: true,
+        });
+
+        instance.show();
+
+        setTimeout(() => createIcons({
+            icons: {AlignLeft, AlignCenter, AlignRight},
+            attrs: {
+                width: '16',
+                height: '16'
+            }
+        }), 0);
+    }
 
     /**
      * Shows or hides the table buttons depending on the mouse position
@@ -315,7 +422,6 @@ export default class TableEditor {
             evt.clientY >= minY &&
             evt.clientY <= maxY
         ) {
-            this._showCtrlButtons()
             // Always recalculate the positions to make sure
             // their position is always updated asap.
             this._recalculateEdgeButtonPositions()
@@ -438,118 +544,68 @@ export default class TableEditor {
      * Recalculates the correct positions of all edge buttons.
      */
     _recalculateEdgeButtonPositions(): void {
-        // First we need the measurements of both the current cell and the container element.
-        let currentCell = this._elem.rows[this._rowIndex].cells[this._cellIndex]
+        const spacing = 5; // 定义间距，单位为像素
+        let currentCell = this._elem.rows[this._rowIndex].cells[this._cellIndex];
+        let currentRow = this._elem.rows[this._rowIndex];
+        let currentColumn = Array.from(this._elem.rows).map(row => row.cells[this._cellIndex]);
 
-        // We need a lot of bounding boxes, actually
-        const cellRect = currentCell.getBoundingClientRect()
-        const containerRect = this._containerElement.getBoundingClientRect()
-        const tableRect = this._elem.getBoundingClientRect()
+        const cellRect = currentCell.getBoundingClientRect();
+        const rowRect = currentRow.getBoundingClientRect();
+        const columnRect = {
+            top: Math.min(...currentColumn.map(cell => cell.getBoundingClientRect().top)),
+            left: cellRect.left,
+            width: cellRect.width,
+            height: this._elem.getBoundingClientRect().height
+        };
+        const containerRect = this._containerElement.getBoundingClientRect();
 
-        let cellTop = cellRect.top
-        let cellLeft = cellRect.left
-        let cellWidth = cellRect.width
-        let cellHeight = cellRect.height
-        let cellRight = cellLeft + cellWidth
-        let cellBottom = cellTop + cellHeight
-        let containerTop = containerRect.top
-        let containerHeight = containerRect.height
-        let containerBottom = containerTop + containerHeight
+        let cellTop = cellRect.top;
+        let cellLeft = cellRect.left;
+        let cellWidth = cellRect.width;
+        let cellHeight = cellRect.height;
+        let cellBottom = cellTop + cellHeight;
+        let containerTop = containerRect.top;
+        let containerHeight = containerRect.height;
+        let containerBottom = containerTop + containerHeight;
 
-        // Determine whether or not the active cell is visible on screen
-        let cellIsOnScreen = cellTop > containerTop && cellBottom < containerBottom
-        // Then calculate the button positions. First for the align- and remove-buttons
-        // as these will always be visible and then for the add-buttons depending on
-        // cell visibility.
-        this._alignButtons.style.top = `${tableRect.top - this._edgeButtonSize}px`
-        this._alignButtons.style.left = `${tableRect.left + this._edgeButtonSize / 2}px`
-        this._removeButtons.style.top = `${tableRect.top - this._edgeButtonSize}px`
-        this._removeButtons.style.left = `${tableRect.left + tableRect.width - this._edgeButtonSize * 2.5}px`
+        let cellIsOnScreen = cellTop > containerTop && cellBottom < containerBottom;
 
-        // After changing the bounding rects, we can get them now
-        const alignButtonsRect = this._alignButtons.getBoundingClientRect()
-        const removeButtonsRect = this._removeButtons.getBoundingClientRect()
-
-        // Also make sure the button groups stay visible
-        // if the user scrolls to one of the edges of the
-        // container element
-        if (alignButtonsRect.top < containerTop) {
-            this._alignButtons.style.top = `${containerTop}px`
-        }
-        if (alignButtonsRect.top + this._edgeButtonSize > containerBottom) {
-            this._alignButtons.style.top = `${containerBottom - this._edgeButtonSize}px`
-        }
-        if (removeButtonsRect.top < containerTop) {
-            this._removeButtons.style.top = `${containerTop}px`
-        }
-        if (removeButtonsRect.top + this._edgeButtonSize > containerBottom) {
-            this._removeButtons.style.top = `${containerBottom - this._edgeButtonSize}px`
-        }
-
-        // Move the buttons if the cell is visible.
         if (cellIsOnScreen) {
-            this._addTopButton.style.top = `${cellTop - this._edgeButtonSize * 0.6}px`
-            this._addTopButton.style.left = `${cellLeft + cellWidth / 2 - this._edgeButtonSize * 1.2 / 2}px`
-            this._addBottomButton.style.top = `${cellBottom}px`
-            this._addBottomButton.style.left = `${cellLeft + cellWidth / 2 - this._edgeButtonSize * 1.2 / 2}px`
-            this._addLeftButton.style.top = `${cellTop + cellHeight / 2 - this._edgeButtonSize * 1.2 / 2}px`
-            this._addLeftButton.style.left = `${cellLeft - this._edgeButtonSize * 0.6}px`
-            this._addRightButton.style.top = `${cellTop + cellHeight / 2 - this._edgeButtonSize * 1.2 / 2}px`
-            this._addRightButton.style.left = `${cellRight}px`
+            // 调整顶部按钮位置到当前列的顶部，并添加间距
+            this._addTopButton.style.top = `${columnRect.top - this._edgeButtonSize * 0.6 - spacing}px`;
+            this._addTopButton.style.left = `${cellLeft + cellWidth / 2 - this._edgeButtonSize * 1.2 / 2}px`;
 
-            // Now we can get the bounding boxes of the four buttons
-            const topButtonRect = this._addTopButton.getBoundingClientRect()
-            const bottomButtonRect = this._addBottomButton.getBoundingClientRect()
-            const leftButtonRect = this._addLeftButton.getBoundingClientRect()
-            const rightButtonRect = this._addRightButton.getBoundingClientRect()
+            // 调整左侧按钮位置到当前行的左侧，并添加间距
+            this._addLeftButton.style.top = `${rowRect.top + rowRect.height / 2 - this._edgeButtonSize * 1.2 / 2}px`;
+            this._addLeftButton.style.left = `${rowRect.left - this._edgeButtonSize * 0.6 - spacing}px`;
 
-            // Then make sure the buttons are actually fully visible when nearing the top edge ...
-            if (topButtonRect.top < containerTop) {
-                this._addTopButton.style.top = `${containerTop}px`
+            const topButtonRect = this._addTopButton.getBoundingClientRect();
+            const leftButtonRect = this._addLeftButton.getBoundingClientRect();
+
+            // 边界检查，确保按钮在可见区域内
+            if (topButtonRect.top < containerTop + spacing) {
+                this._addTopButton.style.top = `${containerTop + spacing}px`;
             }
-            if (bottomButtonRect.top < containerTop) {
-                this._addBottomButton.style.top = `${containerTop}px`
-            }
-            if (leftButtonRect.top < containerTop) {
-                this._addLeftButton.style.top = `${containerTop}px`
-            }
-            if (rightButtonRect.top < containerTop) {
-                this._addRightButton.style.top = `${containerTop}px`
+            if (leftButtonRect.top < containerTop + spacing) {
+                this._addLeftButton.style.top = `${containerTop + spacing}px`;
             }
 
-            // ... and when nearing the bottom edge.
-            if (topButtonRect.top + this._edgeButtonSize > containerBottom) {
-                this._addTopButton.style.top = `${containerBottom - this._edgeButtonSize}px`
+            if (topButtonRect.top + this._edgeButtonSize > containerBottom - spacing) {
+                this._addTopButton.style.top = `${containerBottom - this._edgeButtonSize - spacing}px`;
             }
-            if (bottomButtonRect.top + this._edgeButtonSize > containerBottom) {
-                this._addBottomButton.style.top = `${containerBottom - this._edgeButtonSize}px`
-            }
-            if (leftButtonRect.top + this._edgeButtonSize > containerBottom) {
-                this._addLeftButton.style.top = `${containerBottom - this._edgeButtonSize}px`
-            }
-            if (rightButtonRect.top + this._edgeButtonSize > containerBottom) {
-                this._addRightButton.style.top = `${containerBottom - this._edgeButtonSize}px`
+            if (leftButtonRect.top + this._edgeButtonSize > containerBottom - spacing) {
+                this._addLeftButton.style.top = `${containerBottom - this._edgeButtonSize - spacing}px`;
             }
 
-            // ... and when nearing the right edge.
-            if (topButtonRect.left + this._edgeButtonSize > containerRect.right) {
-                this._addTopButton.style.left = `${containerRect.right - this._edgeButtonSize}px`
+            if (topButtonRect.left + this._edgeButtonSize > containerRect.right - spacing) {
+                this._addTopButton.style.left = `${containerRect.right - this._edgeButtonSize - spacing}px`;
             }
-            if (bottomButtonRect.left + this._edgeButtonSize > containerRect.right) {
-                this._addBottomButton.style.left = `${containerRect.right - this._edgeButtonSize}px`
-            }
-            if (leftButtonRect.left + this._edgeButtonSize > containerRect.right) {
-                this._addLeftButton.style.left = `${containerRect.right - this._edgeButtonSize}px`
-            }
-            if (rightButtonRect.left + this._edgeButtonSize > containerRect.right) {
-                this._addRightButton.style.left = `${containerRect.right - this._edgeButtonSize}px`
+            if (leftButtonRect.left + this._edgeButtonSize > containerRect.right - spacing) {
+                this._addLeftButton.style.left = `${containerRect.right - this._edgeButtonSize - spacing}px`;
             }
         } else {
-            // Hide the buttons as the cell is not visible.
-            this._addTopButton.style.top = '-1000px'
-            this._addBottomButton.style.top = '-1000px'
-            this._addLeftButton.style.top = '-1000px'
-            this._addRightButton.style.top = '-1000px'
+            this._addTopButton.style.top = '-1000px';
+            this._addLeftButton.style.top = '-1000px';
         }
     }
 
@@ -563,11 +619,7 @@ export default class TableEditor {
 
         // Attach all buttons to the DOM
         document.body.appendChild(this._addTopButton)
-        document.body.appendChild(this._addBottomButton)
         document.body.appendChild(this._addLeftButton)
-        document.body.appendChild(this._addRightButton)
-        document.body.appendChild(this._alignButtons)
-        document.body.appendChild(this._removeButtons)
 
         this._recalculateEdgeButtonPositions()
     }
@@ -578,23 +630,7 @@ export default class TableEditor {
     _hideAllButtons(): void {
         // Hide the edge detection buttons again
         this._addTopButton.parentElement?.removeChild(this._addTopButton)
-        this._addBottomButton.parentElement?.removeChild(this._addBottomButton)
         this._addLeftButton.parentElement?.removeChild(this._addLeftButton)
-        this._addRightButton.parentElement?.removeChild(this._addRightButton)
-        this._alignButtons.parentElement?.removeChild(this._alignButtons)
-        this._removeButtons.parentElement?.removeChild(this._removeButtons)
-    }
-
-    _showCtrlButtons(): void {
-        if (this._ctrlButtonsVisible) {
-            return
-        }
-
-        // Attach all buttons to the DOM
-        document.body.appendChild(this._alignButtons)
-        document.body.appendChild(this._removeButtons)
-
-        this._recalculateEdgeButtonPositions()
     }
 
     /**
@@ -604,16 +640,7 @@ export default class TableEditor {
      */
     get _edgeButtonsVisible(): boolean {
         return this._addTopButton.parentElement !== null &&
-            this._addBottomButton.parentElement !== null &&
-            this._addLeftButton.parentElement !== null &&
-            this._addRightButton.parentElement !== null &&
-            this._alignButtons.parentElement !== null &&
-            this._removeButtons.parentElement !== null
-    }
-
-    get _ctrlButtonsVisible(): boolean {
-        return this._alignButtons.parentElement !== null &&
-            this._removeButtons.parentElement !== null
+            this._addLeftButton.parentElement !== null
     }
 
     /**
@@ -630,6 +657,7 @@ export default class TableEditor {
      */
     _signalContentChange(): void {
         const currentTable = JSON.stringify(this._ast)
+
         if (currentTable === this._lastSeenTable && this._isClean) {
             // The table has not changed
             return
@@ -666,9 +694,9 @@ export default class TableEditor {
      *
      * @return  {boolean} True if the table has not changed
      */
-    isClean(): boolean {
-        return this._isClean
-    }
+    // isClean(): boolean {
+    //     return this._isClean
+    // }
 
     /**
      * Moves the cursor to the previous column, switching rows if necessary.

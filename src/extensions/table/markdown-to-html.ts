@@ -1,4 +1,3 @@
-import 'katex/contrib/mhchem'
 import { markdownToAST } from './table-ast'
 import { type ASTNode, type GenericNode } from './table-ast'
 
