@@ -158,9 +158,6 @@ export default class TableEditor {
         const template = document.createElement('div')
         template.classList.add('table-helper-operate-button')
 
-        const alignLine = document.createElement('div')
-        alignLine.classList.add('table-helper-align-button-line')
-
         this._addTopButton = template.cloneNode(true) as HTMLDivElement
         this._addTopButton.classList.add('top')
         this._addTopButton.innerHTML = '&#8943;';

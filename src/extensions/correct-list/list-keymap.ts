@@ -1,6 +1,6 @@
 import {EditorView, KeyBinding} from "@codemirror/view";
 import {indentLess, indentMore} from "@codemirror/commands";
-import {updateListEffect} from "@/extensions/correct-list/update-list-effect.ts";
+import {updateListEffect} from "./update-list-effect.ts";
 
 export const listKeymap: KeyBinding[] = [
     {

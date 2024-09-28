@@ -1,9 +1,9 @@
 import {Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate} from "@codemirror/view";
-import {updateListEffect} from "@/extensions/correct-list/update-list-effect.ts";
-import {updateLists} from "@/extensions/correct-list/list-functions.ts";
+import {updateListEffect} from "./update-list-effect.ts";
+import {updateLists} from "./list-functions.ts";
 import {RangeSetBuilder} from "@codemirror/state";
 import {syntaxTree} from "@codemirror/language";
-import {BulletWidget} from "@/extensions/correct-list/bullet-widget.ts";
+import {BulletWidget} from "./bullet-widget.ts";
 
 export const updateListPlugin = EditorView.updateListener.of((update) => {
     for (let tr of update.transactions) {

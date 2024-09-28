@@ -2,7 +2,8 @@ import {StateField, EditorState} from '@codemirror/state';
 import {EditorView, Decoration, DecorationSet, WidgetType} from '@codemirror/view';
 import {syntaxTree} from '@codemirror/language';
 import {RangeSetBuilder} from './range-set-builder';
-import {BlockWidget} from "@/extensions/markdown-syntax-hiding/block-widget.ts";
+import {BlockWidget} from "./block-widget.ts";
+import {LinkWidget} from "@/moondown/markdown-syntax-hiding/link-widget.ts";
 
 const hiddenMarkdown = Decoration.mark({class: 'cm-hidden-markdown'});
 const visibleMarkdown = Decoration.mark({class: 'cm-visible-markdown'});
@@ -101,16 +102,8 @@ export const markdownSyntaxHidingField = StateField.define<DecorationSet>({
                             const displayText = linkMatch[1] || linkMatch[2];
                             if (!isSelected) {
                                 const replacement = Decoration.replace({
-                                    widget: new class extends WidgetType {
-                                        toDOM() {
-                                            const span = document.createElement("span");
-                                            span.className = "cm-link-widget";
-                                            span.textContent = displayText;
-                                            return span;
-                                        }
-                                        eq(other: this) { return other.toDOM().textContent === this.toDOM().textContent; }
-                                        ignoreEvent() { return false; }
-                                    }
+                                    widget: new LinkWidget(displayText, linkText, start),
+                                    inclusive: true
                                 });
                                 builder.add(start, end, replacement);
                             } else {

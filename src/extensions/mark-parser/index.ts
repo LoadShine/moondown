@@ -1,3 +1,3 @@
-import {MarkExtension} from "@/extensions/mark-parser/mark-parser-extension.ts";
+import {MarkExtension} from "./mark-parser-extension.ts";
 
 export const Mark = MarkExtension;
