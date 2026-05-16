@@ -1,12 +1,3 @@
-/**
- * Selects text contents within the given DOM node. Does not guarantee that the
- * requested range will actually be selected, as some elements cannot have
- * selected text.
- *
- * @param   {Node}    node  The DOM node
- * @param   {number}  from  Optional start, default 0
- * @param   {number}  to    Optional end, default 0
- */
 export function selectElementContents(node: Node, from: number = 0, to: number = 0): void {
     const sel = window.getSelection()
     // From MDN: Firefox may return null, other browsers may return a Selection

@@ -1,197 +1,216 @@
-import {StateField, EditorState} from '@codemirror/state';
-import {EditorView, Decoration, DecorationSet, WidgetType} from '@codemirror/view';
-import {syntaxTree} from '@codemirror/language';
-import {RangeSetBuilder} from './range-set-builder';
-import {BlockWidget} from "./block-widget.ts";
-import {LinkWidget} from "@/moondown/markdown-syntax-hiding/link-widget.ts";
+import { RangeSetBuilder, StateEffect, StateField } from '@codemirror/state';
+import { EditorView, Decoration, type DecorationSet, ViewPlugin, type ViewUpdate } from '@codemirror/view';
+import { syntaxTree } from '@codemirror/language';
+import type { SyntaxNodeRef } from '@lezer/common';
+import {
+    type DecorationItem,
+    type HandlerContext,
+    handleFencedCode,
+    handleBlockquote,
+    handleHorizontalRule,
+    handleOrderedListLineMarker,
+    handleListItem,
+    handleEmphasis,
+    handleInlineCode,
+    handleHeading,
+    handleLink,
+    handleStrikethrough,
+    handleMark,
+    handleUnderline,
+    handleImage,
+    handleLinkDefinition,
+    handleFootnoteDefinition
+} from "./node-handlers";
 
-const hiddenMarkdown = Decoration.mark({class: 'cm-hidden-markdown'});
-const visibleMarkdown = Decoration.mark({class: 'cm-visible-markdown'});
+/**
+ * StateEffect to toggle the syntax hiding feature.
+ */
+export const toggleSyntaxHidingEffect = StateEffect.define<boolean>();
 
-export const markdownSyntaxHidingField = StateField.define<DecorationSet>({
-    create(_: EditorState) {
-        return Decoration.none;
+/**
+ * StateField to hold the current enabled/disabled state of syntax hiding.
+ */
+export const syntaxHidingState = StateField.define<boolean>({
+    create: () => true, // Enabled by default
+    update(value, tr) {
+        for (const e of tr.effects) {
+            if (e.is(toggleSyntaxHidingEffect)) {
+                return e.value;
+            }
+        }
+        return value;
     },
-    update(oldDecorations, transaction) {
-        const builder = new RangeSetBuilder<Decoration>();
-        const {state} = transaction;
-        const selection = state.selection.main;
+});
 
+/**
+ * Mapping of Lezer syntax node names to their corresponding decoration handlers.
+ */
+type NodeHandler = (ctx: HandlerContext, node: SyntaxNodeRef) => DecorationItem[];
+const NODE_HANDLERS: Record<string, NodeHandler> = {
+    'FencedCode': (ctx) => handleFencedCode(ctx),
+    'Blockquote': (ctx) => handleBlockquote(ctx),
+    'HorizontalRule': (ctx) => handleHorizontalRule(ctx),
+    'ListItem': (ctx, node) => handleListItem(ctx, node),
+    'Emphasis': (ctx) => handleEmphasis(ctx, false),
+    'StrongEmphasis': (ctx) => handleEmphasis(ctx, true),
+    'InlineCode': (ctx) => handleInlineCode(ctx),
+    'Link': (ctx) => handleLink(ctx),
+    'Strikethrough': (ctx) => handleStrikethrough(ctx),
+    'Mark': (ctx) => handleMark(ctx),
+    'Underline': (ctx) => handleUnderline(ctx),
+    'Image': (ctx) => handleImage(ctx),
+    'LinkReference': (ctx) => handleLink(ctx),
+};
+
+/**
+ * Special handler for ATX heading nodes (e.g., ATXHeading1, ATXHeading2).
+ */
+function handleATXHeading(ctx: HandlerContext, nodeName: string): DecorationItem[] {
+    const headerLevel = parseInt(nodeName.slice(-1));
+    return handleHeading(ctx, headerLevel);
+}
+
+/**
+ * Builds visible decorations for hiding markdown syntax.
+ */
+function buildMarkdownSyntaxHidingDecorations(view: EditorView): DecorationSet {
+    const decorations: DecorationItem[] = [];
+    const { state } = view;
+    const selection = state.selection.main;
+    const isHidingEnabled = state.field(syntaxHidingState);
+
+    const processedBlockquotes = new Set<string>();
+    const processedDefinitionLines = new Set<number>();
+    const seenNodes = new Set<string>();
+    const seenLines = new Set<number>();
+
+    for (const visibleRange of view.visibleRanges) {
+        const firstLine = state.doc.lineAt(visibleRange.from);
+        const lastLine = state.doc.lineAt(visibleRange.to);
+
+        for (let lineNum = firstLine.number; lineNum <= lastLine.number; lineNum++) {
+            if (seenLines.has(lineNum)) {
+                continue;
+            }
+            seenLines.add(lineNum);
+
+            const line = state.doc.line(lineNum);
+            const lineText = line.text;
+
+            if (/^\[\^([^\]]+)\]:\s*/.test(lineText)) {
+                processedDefinitionLines.add(lineNum);
+                const ctx: HandlerContext = {
+                    state,
+                    selection,
+                    isHidingEnabled,
+                    isSelected: selection.from <= line.to && selection.to >= line.from,
+                    start: line.from,
+                    end: line.to
+                };
+                decorations.push(...handleFootnoteDefinition(ctx));
+            } else if (/^\[([^\]]+)\]:\s*\S+/.test(lineText)) {
+                processedDefinitionLines.add(lineNum);
+                const ctx: HandlerContext = {
+                    state,
+                    selection,
+                    isHidingEnabled,
+                    isSelected: selection.from <= line.to && selection.to >= line.from,
+                    start: line.from,
+                    end: line.to
+                };
+                decorations.push(...handleLinkDefinition(ctx));
+            } else {
+                const ctx: HandlerContext = {
+                    state,
+                    selection,
+                    isHidingEnabled,
+                    isSelected: selection.from <= line.to && selection.to >= line.from,
+                    start: line.from,
+                    end: line.to
+                };
+                decorations.push(...handleOrderedListLineMarker(ctx));
+            }
+        }
+    }
+
+    for (const visibleRange of view.visibleRanges) {
         syntaxTree(state).iterate({
+            from: visibleRange.from,
+            to: visibleRange.to,
             enter: (node) => {
-                if (
-                    ['Emphasis', 'StrongEmphasis', 'InlineCode', 'FencedCode', 'ATXHeading1', 'ATXHeading2',
-                        'ATXHeading3', 'ATXHeading4', 'ATXHeading5', 'Blockquote', 'Link', 'Image', 'Strikethrough',
-                        'Mark'].includes(node.type.name)
-                ) {
-                    const start = node.from;
-                    const end = node.to;
-                    const isSelected = selection.from <= end && selection.to >= start;
+                const nodeKey = `${node.from}:${node.to}:${node.type.name}`;
+                if (seenNodes.has(nodeKey)) {
+                    return;
+                }
+                seenNodes.add(nodeKey);
 
-                    const decorationType = isSelected ? visibleMarkdown : hiddenMarkdown;
+                const start = node.from;
+                const end = node.to;
+                const isSelected = selection.from <= end && selection.to >= start;
 
-                    if (node.type.name === 'FencedCode') {
-                        const fencedCodeStart = state.doc.lineAt(start);
-                        const fencedCodeEnd = state.doc.lineAt(end);
-                        const languageMatch = fencedCodeStart.text.match(/^```(\w+)/);
-                        const language = languageMatch ? languageMatch[1] : '';
-                        const codeContent = state.doc.sliceString(fencedCodeStart.from + fencedCodeStart.text.indexOf('```') + 3 + language.length + 1, fencedCodeEnd.to - 3);
+                const startLine = state.doc.lineAt(start);
+                if (processedDefinitionLines.has(startLine.number)) {
+                    return false;
+                }
 
-                        if (!isSelected) {
-                            const replacement = Decoration.replace({
-                                widget: new BlockWidget(codeContent, 'blockcode', language),
-                            });
-                            builder.add(fencedCodeStart.from, fencedCodeEnd.to, replacement);
-                        } else {
-                            builder.add(fencedCodeStart.from, fencedCodeStart.from + fencedCodeStart.text.indexOf('```') + 3 + language.length + 1, decorationType);
-                            builder.add(fencedCodeEnd.to - 3, fencedCodeEnd.to, decorationType);
-                        }
-                    } else if (node.type.name.startsWith('ATXHeading')) {
-                        const headerLevel = parseInt(node.type.name.slice(-1));
-                        builder.add(start, start + headerLevel + 1, decorationType);
-                    } else if (node.type.name === 'Blockquote') {
-                        const blockquoteStart = state.doc.lineAt(start);
-                        const blockquoteEnd = state.doc.lineAt(end);
-                        const blockquoteContent = state.doc.sliceString(blockquoteStart.from, blockquoteEnd.to);
+                const ctx: HandlerContext = { state, selection, isHidingEnabled, isSelected, start, end };
 
-                        if (!isSelected) {
-                            const replacement = Decoration.replace({
-                                widget: new BlockWidget(blockquoteContent, 'blockquote'),
-                            });
-                            builder.add(blockquoteStart.from, blockquoteEnd.to, replacement);
-                        } else {
-                            for (let pos = start; pos <= end;) {
-                                const line = state.doc.lineAt(pos);
-                                const lineStart = line.from;
-                                const lineEnd = line.to;
-                                const lineText = line.text;
-                                const quoteIndex = lineText.indexOf('>');
-                                if (quoteIndex !== -1) {
-                                    builder.add(lineStart + quoteIndex, lineStart + quoteIndex + 1, visibleMarkdown);
-                                }
-                                pos = lineEnd + 1;
-                            }
-                        }
-                    } else if (node.type.name === 'StrongEmphasis') {
-                        builder.add(start, start + 2, decorationType);
-                        builder.add(end - 2, end, decorationType);
-                    } else if (node.type.name === 'InlineCode') {
-                        if (!isSelected) {
-                            const inlineCodeContent = state.doc.sliceString(start, end);
-                            const replacement = Decoration.replace({
-                                widget: new class extends WidgetType {
-                                    toDOM() {
-                                        const span = document.createElement("span");
-                                        span.className = "cm-inline-code-widget";
-                                        span.textContent = inlineCodeContent.slice(1, -1); // Remove backticks
-                                        return span;
-                                    }
-                                    eq(other: this) { return other.toDOM().textContent === this.toDOM().textContent; }
-                                    ignoreEvent() { return false; }
-                                }
-                            });
-                            builder.add(start, end, replacement);
-                        } else {
-                            builder.add(start, start + 1, decorationType);
-                            builder.add(end - 1, end, decorationType);
-                        }
-                    } else if (node.type.name === 'Link') {
-                        const linkText = state.doc.sliceString(start, end);
-                        const linkMatch = linkText.match(/\[([^\]]*)\]\(([^)]+)\)/);
-                        if (linkMatch) {
-                            const displayText = linkMatch[1] || linkMatch[2];
-                            if (!isSelected) {
-                                const replacement = Decoration.replace({
-                                    widget: new LinkWidget(displayText, linkText, start),
-                                    inclusive: true
-                                });
-                                builder.add(start, end, replacement);
-                            } else {
-                                const linkStart = start + linkText.indexOf('[');
-                                const linkEnd = start + linkText.indexOf(']') + 1;
-                                builder.add(linkStart, linkEnd, decorationType);
-                                const urlStart = start + linkText.indexOf('(');
-                                const urlEnd = start + linkText.indexOf(')') + 1;
-                                builder.add(urlStart, urlEnd, decorationType);
-                            }
-                        }
-                    } else if (node.type.name === 'Image') {
-                        const imageText = state.doc.sliceString(start, end);
-                        const imageMatch = imageText.match(/!\[([^\]]*)\]\(([^)]+)\)/);
-                        if (imageMatch) {
-                            const alt = imageMatch[1];
-                            const src = imageMatch[2];
-                            if (!isSelected) {
-                                let existingDeco: Decoration | undefined;
-                                oldDecorations.between(start, end, (_, __, value) => {
-                                    if (value.spec?.widget instanceof BlockWidget && value.spec.widget.src === src) {
-                                        existingDeco = value;
-                                        return false;
-                                    }
-                                });
+                if (node.type.name.startsWith('ATXHeading')) {
+                    decorations.push(...handleATXHeading(ctx, node.type.name));
+                    return;
+                }
 
-                                if (existingDeco) {
-                                    builder.add(start, end, existingDeco);
-                                } else {
-                                    const replacement = Decoration.replace({
-                                        widget: new BlockWidget(imageText, 'image', undefined, alt, src),
-                                    });
-                                    builder.add(start, end, replacement);
-                                }
-                            } else {
-                                builder.add(start, start + 2, decorationType); // Hide '!['
-                                builder.add(start + 2 + alt.length, end, decorationType); // Hide '](...)'
-                            }
-                        }
-                    } else if (node.type.name === 'Strikethrough') {
-                        if (!isSelected) {
-                            const strikethroughContent = state.doc.sliceString(start + 2, end - 2);
-                            const replacement = Decoration.replace({
-                                widget: new class extends WidgetType {
-                                    toDOM() {
-                                        const span = document.createElement("span");
-                                        span.className = "cm-strikethrough-widget";
-                                        span.textContent = strikethroughContent;
-                                        return span;
-                                    }
-                                    eq(other: this) { return other.toDOM().textContent === this.toDOM().textContent; }
-                                    ignoreEvent() { return false; }
-                                }
-                            });
-                            builder.add(start, end, replacement);
-                        } else {
-                            builder.add(start, start + 2, decorationType);
-                            builder.add(end - 2, end, decorationType);
-                        }
-                    } else if (node.type.name === 'Mark') {
-                        if (!isSelected) {
-                            const highlightContent = state.doc.sliceString(start + 2, end - 2);
-                            const replacement = Decoration.replace({
-                                widget: new class extends WidgetType {
-                                    toDOM() {
-                                        const span = document.createElement("span");
-                                        span.className = "cm-highlight-widget";
-                                        span.textContent = highlightContent;
-                                        return span;
-                                    }
-                                    eq(other: this) { return other.toDOM().textContent === this.toDOM().textContent; }
-                                    ignoreEvent() { return false; }
-                                }
-                            });
-                            builder.add(start, end, replacement);
-                        } else {
-                            builder.add(start, start + 2, decorationType);
-                            builder.add(end - 2, end, decorationType);
-                        }
-                    } else {
-                        builder.add(start, start + 1, decorationType);
-                        builder.add(end - 1, end, decorationType);
+                if (node.type.name === 'Blockquote') {
+                    const key = `${start}-${end}`;
+                    if (!processedBlockquotes.has(key)) {
+                        processedBlockquotes.add(key);
+                        decorations.push(...handleBlockquote(ctx));
                     }
+                    return;
+                }
+
+                const handler = NODE_HANDLERS[node.type.name];
+                if (handler) {
+                    decorations.push(...handler(ctx, node));
                 }
             },
         });
+    }
 
-        return builder.finish();
+    decorations.sort((a, b) => {
+        if (a.from !== b.from) return a.from - b.from;
+        if (a.to !== b.to) return a.to - b.to;
+
+        const aStartSide = a.decoration.spec.startSide ?? 0;
+        const bStartSide = b.decoration.spec.startSide ?? 0;
+        return aStartSide - bStartSide;
+    });
+
+    const builder = new RangeSetBuilder<Decoration>();
+    for (const { from, to, decoration } of decorations) {
+        builder.add(from, to, decoration);
+    }
+    return builder.finish();
+}
+
+export const markdownSyntaxHidingField = ViewPlugin.fromClass(
+    class {
+        decorations: DecorationSet;
+
+        constructor(view: EditorView) {
+            this.decorations = buildMarkdownSyntaxHidingDecorations(view);
+        }
+
+        update(update: ViewUpdate): void {
+            const syntaxHidingChanged =
+                update.startState.field(syntaxHidingState) !== update.state.field(syntaxHidingState);
+
+            if (update.docChanged || update.viewportChanged || update.selectionSet || syntaxHidingChanged) {
+                this.decorations = buildMarkdownSyntaxHidingDecorations(update.view);
+            }
+        }
     },
-    provide: (f) => EditorView.decorations.from(f),
-});
+    {
+        decorations: (plugin) => plugin.decorations,
+    }
+);

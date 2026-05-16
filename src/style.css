@@ -1,0 +1,728 @@
+:root {
+  --color-primary-hsl: 211 100% 50%;
+  --color-primary-light-hsl: 209 100% 72%;
+  --color-primary-dark-hsl: 211 100% 42%;
+  --moondown-accent: hsl(var(--color-primary-hsl));
+  --moondown-accent-strong: hsl(var(--color-primary-dark-hsl));
+  --moondown-accent-soft: hsl(var(--color-primary-hsl) / 0.12);
+  --moondown-bg: #ffffff;
+  --moondown-surface: rgba(255, 255, 255, 0.82);
+  --moondown-surface-solid: #ffffff;
+  --moondown-surface-muted: #f2f2f7;
+  --moondown-line: rgba(60, 60, 67, 0.18);
+  --moondown-line-soft: rgba(60, 60, 67, 0.10);
+  --moondown-line-strong: rgba(60, 60, 67, 0.29);
+  --moondown-text: #1d1d1f;
+  --moondown-muted: #6e6e73;
+  --moondown-tertiary: #8e8e93;
+  --moondown-danger: #ff3b30;
+  --moondown-success: #34c759;
+  --moondown-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  --moondown-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+  --moondown-mono: "SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
+  --moondown-shadow: 0 24px 64px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.04);
+  --moondown-shadow-soft: 0 12px 32px rgba(0, 0, 0, 0.08);
+  --moondown-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --moondown-spring: cubic-bezier(0.16, 1, 0.3, 1);
+  --ai-panel-bg: var(--moondown-surface);
+  --ai-panel-border: var(--moondown-line-soft);
+  --ai-panel-shadow: var(--moondown-shadow);
+  --ai-accent: var(--moondown-accent);
+  --ai-text-primary: var(--moondown-text);
+  --ai-text-secondary: var(--moondown-muted);
+  --ai-font-family: var(--moondown-font);
+}
+
+.dark {
+  --moondown-accent: hsl(var(--color-primary-light-hsl));
+  --moondown-accent-strong: hsl(var(--color-primary-hsl));
+  --moondown-accent-soft: hsl(var(--color-primary-light-hsl) / 0.18);
+  --moondown-bg: #1c1c1e;
+  --moondown-surface: rgba(28, 28, 30, 0.78);
+  --moondown-surface-solid: #1c1c1e;
+  --moondown-surface-muted: #2c2c2e;
+  --moondown-line: rgba(84, 84, 88, 0.5);
+  --moondown-line-soft: rgba(84, 84, 88, 0.28);
+  --moondown-line-strong: rgba(84, 84, 88, 0.7);
+  --moondown-text: #f5f5f7;
+  --moondown-muted: #a1a1a6;
+  --moondown-tertiary: #8e8e93;
+  --moondown-danger: #ff453a;
+  --moondown-shadow: 0 32px 72px rgba(0, 0, 0, 0.56), 0 2px 6px rgba(0, 0, 0, 0.32);
+  --moondown-shadow-soft: 0 18px 42px rgba(0, 0, 0, 0.42);
+}
+
+.cm-editor {
+  font-family: var(--moondown-font);
+  font-size: 15.5px;
+  line-height: 1.7;
+}
+
+.cm-hide-line {
+  display: none;
+}
+
+.cm-link-definition-line {
+  background: var(--moondown-accent-soft);
+}
+
+.cm-link-definition-url {
+  color: var(--moondown-accent);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+
+.cm-bullet-list-l0 .bullet-symbol,
+.cm-bullet-list-l1 .bullet-symbol,
+.cm-bullet-list-l2 .bullet-symbol,
+.cm-bullet-list-l3 .bullet-symbol,
+.cm-bullet-list-l4 .bullet-symbol,
+.cm-bullet-list-l5 .bullet-symbol {
+  color: var(--moondown-accent);
+}
+
+.dark .cm-bullet-list-l0 .bullet-symbol,
+.dark .cm-bullet-list-l1 .bullet-symbol,
+.dark .cm-bullet-list-l2 .bullet-symbol,
+.dark .cm-bullet-list-l3 .bullet-symbol,
+.dark .cm-bullet-list-l4 .bullet-symbol,
+.dark .cm-bullet-list-l5 .bullet-symbol {
+  color: var(--moondown-accent);
+}
+
+.cm-image-wrapper {
+  position: relative;
+  display: flex;
+  width: 100%;
+  justify-content: center;
+}
+
+.cm-image-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* ============================================================
+ * AI Polish Panel — floating composer (Apple Intelligence feel)
+ * ============================================================ */
+
+.cm-ai-polish-panel {
+  position: fixed;
+  z-index: 9999;
+  width: min(440px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--ai-text-primary);
+  background: var(--ai-panel-bg);
+  border: 0.5px solid var(--ai-panel-border);
+  border-radius: 18px;
+  box-shadow: var(--ai-panel-shadow);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  font-family: var(--ai-font-family);
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
+  animation: aiPanelIn 240ms var(--moondown-spring) forwards;
+  -webkit-font-smoothing: antialiased;
+}
+
+@keyframes aiPanelIn {
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.ai-polish-icon-btn,
+.ai-polish-send-btn,
+.ai-polish-action-btn,
+.cm-widget-edit-bubble-button,
+.cm-bubble-menu-item,
+.cm-bubble-menu-sub-item {
+  font-family: inherit;
+}
+
+.ai-polish-icon-btn,
+.ai-polish-send-btn,
+.ai-polish-action-btn {
+  box-sizing: border-box;
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  line-height: 1;
+}
+
+.ai-polish-icon-btn > span,
+.ai-polish-send-btn > span,
+.ai-polish-action-btn > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: inherit;
+  line-height: 1;
+}
+
+.ai-polish-icon-btn svg,
+.ai-polish-send-btn svg,
+.ai-polish-action-btn svg {
+  display: block;
+  flex: 0 0 auto;
+  color: inherit;
+  stroke: currentColor;
+}
+
+.ai-polish-icon-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ai-text-secondary);
+  cursor: pointer;
+}
+
+.ai-polish-close-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 20;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  min-height: 26px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--moondown-tertiary);
+  background: transparent;
+  transition: background-color 160ms var(--moondown-easing), color 160ms var(--moondown-easing);
+}
+
+.ai-polish-close-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.ai-polish-close-btn:hover {
+  color: var(--moondown-text);
+  background: color-mix(in srgb, var(--moondown-muted) 16%, transparent);
+}
+
+.cm-ai-polish-input-section {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 44px 18px 16px;
+}
+
+.ai-polish-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  min-height: 44px;
+  border: 0.5px solid var(--moondown-line);
+  border-radius: 14px;
+  background: var(--moondown-surface-solid);
+  transition: border-color 180ms var(--moondown-easing), box-shadow 180ms var(--moondown-easing);
+}
+
+.ai-polish-input-wrapper:focus-within {
+  border-color: color-mix(in srgb, var(--moondown-accent) 55%, var(--moondown-line));
+  box-shadow: 0 0 0 4px var(--moondown-accent-soft);
+}
+
+.cm-ai-polish-input {
+  width: 100%;
+  min-height: 44px;
+  max-height: 160px;
+  resize: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ai-text-primary);
+  padding: 11px 46px 11px 14px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.cm-ai-polish-input::placeholder {
+  color: var(--ai-text-secondary);
+  opacity: 0.7;
+}
+
+.ai-polish-send-btn {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--moondown-tertiary);
+  color: #ffffff;
+  cursor: pointer;
+  opacity: 0.55;
+  transform: scale(0.92);
+  transition: background-color 180ms var(--moondown-easing), opacity 180ms var(--moondown-easing), transform 180ms var(--moondown-spring);
+}
+
+.ai-polish-send-btn > span {
+  width: 100%;
+  height: 100%;
+}
+
+.ai-polish-send-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.ai-polish-send-btn:hover:not(:disabled),
+.ai-polish-send-btn:focus-visible:not(:disabled) {
+  background: var(--moondown-accent-strong);
+  color: #ffffff;
+  opacity: 1;
+  transform: scale(1);
+}
+
+.cm-ai-polish-input:focus ~ .ai-polish-send-btn,
+.cm-ai-polish-input:not(:placeholder-shown) ~ .ai-polish-send-btn {
+  background: var(--ai-accent);
+  opacity: 1;
+  transform: scale(1);
+}
+
+.ai-polish-send-btn:active {
+  transform: scale(0.92);
+}
+
+.ai-polish-send-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.ai-polish-hint {
+  margin-top: 10px;
+  padding: 0 4px;
+  color: var(--ai-text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  text-align: right;
+  letter-spacing: 0.01em;
+}
+
+.cm-ai-polish-response-section {
+  display: none;
+  max-height: 360px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 18px 18px;
+  border-top: 0.5px solid var(--ai-panel-border);
+  background: color-mix(in srgb, var(--moondown-surface-muted) 60%, transparent);
+}
+
+.cm-ai-polish-response-section.visible {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ai-polish-user-bubble {
+  align-self: flex-end;
+  max-width: 84%;
+  margin-left: auto;
+  padding: 9px 13px;
+  border-radius: 18px 18px 6px 18px;
+  background: var(--moondown-accent);
+  color: #ffffff;
+  font-size: 13.5px;
+  line-height: 1.45;
+  word-wrap: break-word;
+  animation: slideUp 220ms var(--moondown-spring);
+}
+
+.cm-ai-polish-response-bubble {
+  align-self: flex-start;
+  width: 100%;
+  padding: 13px 14px;
+  border: 0.5px solid var(--moondown-line-soft);
+  border-radius: 14px;
+  background: var(--moondown-surface-solid);
+  animation: slideUp 240ms var(--moondown-spring);
+}
+
+.cm-ai-polish-response-bubble:last-child .ai-polish-action-bar {
+  display: flex;
+}
+
+.cm-ai-polish-response-bubble.error .ai-polish-response-text {
+  color: var(--moondown-danger);
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ai-polish-response-text {
+  color: var(--ai-text-primary);
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.ai-polish-typing-indicator {
+  display: flex;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.ai-polish-typing-indicator span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ai-text-secondary);
+  animation: typing 1.3s infinite ease-in-out both;
+}
+
+.ai-polish-typing-indicator span:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.ai-polish-typing-indicator span:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes typing {
+  0%,
+  80%,
+  100% {
+    transform: scale(0.4);
+    opacity: 0.35;
+  }
+
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.ai-polish-action-bar {
+  display: none;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 0.5px solid var(--ai-panel-border);
+  opacity: 0;
+  animation: fadeIn 220ms ease forwards;
+}
+
+@keyframes fadeIn {
+  to {
+    opacity: 1;
+  }
+}
+
+.ai-polish-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: auto;
+  height: 30px;
+  min-width: 0;
+  min-height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ai-text-secondary);
+  padding: 5px 10px;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  transition: background-color 160ms var(--moondown-easing), color 160ms var(--moondown-easing);
+}
+
+.ai-polish-action-btn > span:first-child {
+  width: 14px;
+  height: 14px;
+}
+
+.ai-polish-action-btn > span:not(:first-child) {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.ai-polish-action-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ai-polish-action-btn:hover {
+  background: var(--moondown-surface-muted);
+  color: var(--ai-text-primary);
+}
+
+.ai-polish-action-btn.primary-action {
+  margin-left: auto;
+  color: #ffffff;
+  background: var(--moondown-accent);
+  padding: 5px 14px;
+}
+
+.ai-polish-action-btn.primary-action:hover {
+  background: var(--moondown-accent-strong);
+  color: #ffffff;
+}
+
+.cm-ai-polish-response-section::-webkit-scrollbar {
+  width: 8px;
+}
+
+.cm-ai-polish-response-section::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--moondown-muted) 35%, transparent);
+  background-clip: padding-box;
+}
+
+/* ============================================================
+ * Bubble Menu — floating formatting toolbar
+ * ============================================================ */
+
+.cm-bubble-menu {
+  position: absolute;
+  z-index: 1000;
+  display: flex;
+  gap: 2px;
+  padding: 5px;
+  border: 0.5px solid var(--moondown-line-soft);
+  border-radius: 13px;
+  background: var(--moondown-surface);
+  box-shadow: var(--moondown-shadow);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  will-change: opacity, transform;
+}
+
+.cm-bubble-menu-item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 32px;
+  min-height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--moondown-text);
+  padding: 6px;
+  cursor: pointer;
+  transition: background-color 140ms var(--moondown-easing), color 140ms var(--moondown-easing);
+}
+
+.cm-bubble-menu-item[data-type="button"] {
+  width: 32px;
+  padding: 6px;
+  gap: 0;
+}
+
+.cm-bubble-menu-item[data-type="dropdown"] {
+  justify-content: flex-start;
+  padding: 6px 6px 6px 8px;
+}
+
+.cm-bubble-menu-item:hover {
+  background: var(--moondown-surface-muted);
+}
+
+.cm-bubble-menu-item.active {
+  color: var(--moondown-accent);
+  background: var(--moondown-accent-soft);
+}
+
+.cm-bubble-menu-icon,
+.cm-bubble-menu-dropdown-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cm-bubble-menu-dropdown-icon {
+  opacity: 0.6;
+}
+
+.cm-bubble-menu-dropdown-icon svg {
+  width: 11px;
+  height: 11px;
+}
+
+.cm-bubble-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 200px;
+  padding: 5px;
+  border: 0.5px solid var(--moondown-line-soft);
+  border-radius: 12px;
+  background: var(--moondown-surface);
+  box-shadow: var(--moondown-shadow);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-6px);
+  transition: opacity 180ms var(--moondown-easing), visibility 180ms var(--moondown-easing), transform 180ms var(--moondown-spring);
+}
+
+.cm-bubble-menu-item:hover .cm-bubble-menu-dropdown {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.cm-bubble-menu-sub-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 32px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--moondown-text);
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: background-color 140ms var(--moondown-easing), color 140ms var(--moondown-easing);
+}
+
+.cm-bubble-menu-sub-item:hover {
+  background: var(--moondown-surface-muted);
+}
+
+.cm-bubble-menu-sub-item.active {
+  color: var(--moondown-accent);
+  background: var(--moondown-accent-soft);
+}
+
+.cm-bubble-menu-sub-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.cm-bubble-menu-sub-label {
+  color: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+
+/* ============================================================
+ * Widget Edit Bubble — inline edit overlay
+ * ============================================================ */
+
+.cm-widget-edit-bubble {
+  position: absolute;
+  z-index: 1200;
+  display: none;
+  width: min(520px, calc(100vw - 32px));
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 0.5px solid var(--moondown-line-soft);
+  border-radius: 16px;
+  background: var(--moondown-surface);
+  box-shadow: var(--moondown-shadow);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+}
+
+.cm-widget-edit-bubble-title {
+  color: var(--moondown-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cm-widget-edit-bubble-input {
+  width: 100%;
+  min-height: 38px;
+  resize: vertical;
+  border: 0.5px solid var(--moondown-line);
+  border-radius: 10px;
+  background: var(--moondown-surface-solid);
+  color: var(--moondown-text);
+  font-family: var(--moondown-mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  padding: 10px 12px;
+  outline: none;
+  transition: border-color 180ms var(--moondown-easing), box-shadow 180ms var(--moondown-easing);
+}
+
+.cm-widget-edit-bubble.cm-widget-edit-bubble-multiline .cm-widget-edit-bubble-input {
+  min-height: 132px;
+}
+
+.cm-widget-edit-bubble-input:focus {
+  border-color: color-mix(in srgb, var(--moondown-accent) 56%, var(--moondown-line));
+  box-shadow: 0 0 0 4px var(--moondown-accent-soft);
+}
+
+.cm-widget-edit-bubble-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.cm-widget-edit-bubble-button {
+  appearance: none;
+  min-height: 30px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--moondown-accent);
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  transition: background-color 140ms var(--moondown-easing), color 140ms var(--moondown-easing);
+}
+
+.cm-widget-edit-bubble-button:hover {
+  background: var(--moondown-surface-muted);
+}
+
+.cm-widget-edit-bubble-button.cm-widget-edit-bubble-button-primary {
+  background: var(--moondown-accent);
+  color: #ffffff;
+}
+
+.cm-widget-edit-bubble-button.cm-widget-edit-bubble-button-primary:hover {
+  background: var(--moondown-accent-strong);
+}

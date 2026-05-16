@@ -1,8 +1,23 @@
+
+/**
+ * Table node parser for markdown table AST conversion
+ *
+ * This module provides functionality to parse Lezer SyntaxNodes representing
+ * markdown tables into a structured AST (Abstract Syntax Tree) format. It handles
+ * both pipe tables and grid tables, extracting cell contents, determining column
+ * alignments, and organizing table structure for further processing.
+ *
+ * Key features:
+ * - Extracts table header and row data from syntax nodes
+ * - Determines column alignment from delimiter rows
+ * - Handles empty cells and table delimiters
+ * - Creates structured AST representation with position information
+ */
 import {type SyntaxNode} from '@lezer/common'
-import type {Table, TableRow, TableCell} from './table-ast'
-import {genericTextNode} from './generic-text-node'
-import {getWhitespaceBeforeNode} from "./table-functions";
-import {parseChildren} from "./parse-children";
+import type {Table, TableRow, TableCell} from './table-ast.ts'
+import {genericTextNode} from './generic-text-node.ts'
+import {getWhitespaceBeforeNode} from "./table-functions.ts";
+import {parseChildren} from "./parse-children.ts";
 
 /**
  * Parses a SyntaxNode of name "Table"
@@ -30,13 +45,14 @@ export function parseTableNode(node: SyntaxNode, markdown: string): Table {
     // header row (pipe tables) or a delimiter row (grid tables) in order to
     // determine the column alignments.
     for (const line of markdown.substring(node.from, node.to).split('\n')) {
-        if (!/^[|+:-]+$/.test(line)) {
+        const normalizedLine = line.trim().replace(/\s+/g, '');
+        if (!/^[|+:-]+$/.test(normalizedLine)) {
             continue
         }
 
         // The plus indicates a special Pandoc-type of pipe table
-        const splitter = line.includes('+') ? '+' : '|'
-        astNode.alignment = line.split(splitter)
+        const splitter = normalizedLine.includes('+') ? '+' : '|'
+        astNode.alignment = normalizedLine.split(splitter)
             // NOTE: |-|-| will result in ['', '-', '-', ''] -> filter out
             .filter(c => c.length > 0)
             .map(c => {

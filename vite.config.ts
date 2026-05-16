@@ -1,37 +1,72 @@
-import path from 'node:path'
-import { defineConfig } from 'vite'
+import { resolve } from 'node:path';
+import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 
-import tailwind from 'tailwindcss'
-import autoprefixer from 'autoprefixer'
+const external = [
+  '@codemirror/autocomplete',
+  '@codemirror/commands',
+  '@codemirror/lang-markdown',
+  '@codemirror/language',
+  '@codemirror/language-data',
+  '@codemirror/state',
+  '@codemirror/view',
+  '@lezer/common',
+  '@lezer/highlight',
+  '@lezer/markdown',
+  '@popperjs/core',
+  'lucide',
+  'tippy.js'
+];
 
-export default defineConfig({
-    build: {
+export default defineConfig(({ mode }) => {
+  if (mode === 'lib') {
+    return {
+      plugins: [
+        dts({
+          include: ['src'],
+          entryRoot: 'src',
+          insertTypesEntry: true,
+          rollupTypes: true,
+          tsconfigPath: resolve(__dirname, 'tsconfig.json')
+        })
+      ],
+      build: {
+        emptyOutDir: true,
+        sourcemap: true,
         lib: {
-            entry: 'src/index.ts',
-            name: 'Moondown',
-            fileName: (format) => `moondown.${format}.js`
+          entry: resolve(__dirname, 'src/index.ts'),
+          name: 'Moondown',
+          formats: ['es', 'cjs'],
+          fileName: (format) => (format === 'es' ? 'index.js' : 'index.cjs')
         },
         rollupOptions: {
-            external: ['@codemirror/state', '@codemirror/view', '@codemirror/commands'],
-            output: {
-                globals: {
-                    '@codemirror/state': 'CodeMirrorState',
-                    '@codemirror/view': 'CodeMirrorView',
-                    '@codemirror/commands': 'CodeMirrorCommands'
-                }
+          external,
+          output: {
+            globals: {
+              lucide: 'lucide',
+              'tippy.js': 'tippy'
             }
+          }
         }
+      }
+    };
+  }
+
+  return {
+    root: resolve(__dirname, 'playground'),
+    server: {
+      port: 5174,
+      fs: {
+        allow: [resolve(__dirname)]
+      }
     },
-    css: {
-        postcss: {
-            plugins: [tailwind(), autoprefixer()],
-        },
+    preview: {
+      port: 4174
     },
-    plugins: [dts()],
     resolve: {
-        alias: {
-            '@': path.resolve(__dirname, './src'),
-        },
-    },
-})
+      alias: {
+        '@moondown': resolve(__dirname, 'src')
+      }
+    }
+  };
+});

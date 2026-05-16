@@ -1,30 +1,35 @@
-import {EditorView, KeyBinding} from "@codemirror/view";
-import {indentLess, indentMore} from "@codemirror/commands";
-import {updateListEffect} from "./update-list-effect.ts";
+import { EditorView, type KeyBinding } from "@codemirror/view";
+import { indentLess, indentMore, deleteCharBackward, deleteCharForward } from "@codemirror/commands";
+import { updateListEffect } from "./update-list-effect";
+import { getListInfo, generateListItem } from "./list-functions";
+import { LIST_INDENT, LIST_UPDATE_DELAY } from "./constants";
 
+/**
+ * Keymap for list editing functionality.
+ * Handles Tab, Shift-Tab, Enter, Backspace, and Delete keys to provide
+ * intuitive list management.
+ */
 export const listKeymap: KeyBinding[] = [
     {
         key: 'Tab',
         run: (view: EditorView) => {
             const { state } = view;
             const { selection } = state;
-            const ranges = selection.ranges;
+            const pos = selection.main.head;
+            const listInfo = getListInfo(state, pos);
 
-            for (let range of ranges) {
-                const pos = range.head;
-                const line = state.doc.lineAt(pos);
-                const lineStart = line.from;
-                const beforeCursor = state.doc.sliceString(lineStart, pos);
+            if (listInfo) {
+                // Indent the list item
+                indentMore(view);
 
-                // Match ordered or unordered list item
-                const listItemMatch = beforeCursor.match(/^(\s*)(\d+\.|[-*])\s/);
-                if (listItemMatch) {
-                    indentMore(view);
+                // Defer list number update to ensure the indent operation completes
+                setTimeout(() => {
                     view.dispatch({
                         effects: updateListEffect.of({ from: 0, to: state.doc.length }),
                     });
-                    return true;
-                }
+                }, LIST_UPDATE_DELAY);
+
+                return true;
             }
             return false;
         },
@@ -34,23 +39,21 @@ export const listKeymap: KeyBinding[] = [
         run: (view: EditorView) => {
             const { state } = view;
             const { selection } = state;
-            const ranges = selection.ranges;
+            const pos = selection.main.head;
+            const listInfo = getListInfo(state, pos);
 
-            for (let range of ranges) {
-                const pos = range.head;
-                const line = state.doc.lineAt(pos);
-                const lineStart = line.from;
-                const beforeCursor = state.doc.sliceString(lineStart, pos);
+            if (listInfo && listInfo.indent > LIST_INDENT.MIN) {
+                // Decrease indentation
+                indentLess(view);
 
-                // Match ordered or unordered list item
-                const listItemMatch = beforeCursor.match(/^(\s*)(\d+\.|[-*])\s/);
-                if (listItemMatch) {
-                    indentLess(view);
+                // Defer list number update
+                setTimeout(() => {
                     view.dispatch({
                         effects: updateListEffect.of({ from: 0, to: state.doc.length }),
                     });
-                    return true;
-                }
+                }, LIST_UPDATE_DELAY);
+
+                return true;
             }
             return false;
         },
@@ -60,94 +63,133 @@ export const listKeymap: KeyBinding[] = [
         run: (view: EditorView) => {
             const { state } = view;
             const { selection } = state;
-            const range = selection.main;
-            const pos = range.head;
-            const line = state.doc.lineAt(pos);
-            const lineStart = line.from;
-            const lineEnd = line.to;
-            const beforeCursor = state.doc.sliceString(lineStart, pos);
-            const afterCursor = state.doc.sliceString(pos, lineEnd);
+            const pos = selection.main.head;
+            const listInfo = getListInfo(state, pos);
 
-            const orderedListMatch = beforeCursor.match(/^(\s*)(\d+)\.\s(.*)/);
-            const unorderedListMatch = beforeCursor.match(/^(\s*)([-*])\s(.*)/);
+            if (listInfo) {
+                const line = state.doc.lineAt(pos);
 
-            if (orderedListMatch || unorderedListMatch) {
-                const match = orderedListMatch || unorderedListMatch;
-                const indentation = match![1];
-                const listMarker = match![2];
-                const content = match![3];
-
-                if (content.trim().length === 0 && afterCursor.trim().length === 0) {
-                    // Current item is empty, return to previous level or exit list
-                    const lines = state.doc.sliceString(0, lineStart).split('\n');
-                    let prevIndentation: string | null = null;
-                    let prevListMarker: string | null = null;
-
-                    // Find previous level list item
-                    for (let i = lines.length - 1; i >= 0; i--) {
-                        const prevLine = lines[i];
-                        const prevMatch = prevLine.match(/^(\s*)(\d+\.|[-*])\s/);
-                        if (prevMatch) {
-                            if (prevMatch[1].length < indentation.length) {
-                                prevIndentation = prevMatch[1];
-                                prevListMarker = prevMatch[2];
-                                break;
-                            }
-                        }
-                    }
-
-                    if (prevIndentation !== null && prevListMarker !== null) {
-                        // Previous level exists, adjust indentation and update marker
-                        let newMarker = prevListMarker;
-                        if (prevListMarker.match(/\d+\./)) {
-                            newMarker = (parseInt(prevListMarker) + 1) + '.';
-                        }
+                if (listInfo.content.trim() === '') {
+                    // If the current list item is empty, de-indent or exit the list
+                    if (listInfo.indent === LIST_INDENT.MIN) {
+                        // At the top level, so exit the list
                         const transaction = state.update({
                             changes: {
-                                from: lineStart,
-                                to: lineEnd,
-                                insert: prevIndentation + newMarker + ' ',
-                            },
-                            selection: { anchor: lineStart + prevIndentation.length + newMarker.length + 1 },
-                        });
-                        view.dispatch(transaction);
-                    } else {
-                        // No previous level, exit list
-                        const transaction = state.update({
-                            changes: {
-                                from: lineStart,
-                                to: lineStart + indentation.length + listMarker.length + 2,
+                                from: line.from,
+                                to: line.to,
                                 insert: '',
                             },
+                            selection: { anchor: line.from }
                         });
                         view.dispatch(transaction);
+                    } else {
+                        // De-indent to the previous level
+                        const newIndent = Math.max(LIST_INDENT.MIN, listInfo.indent - LIST_INDENT.SIZE);
+                        const newListItem = generateListItem(listInfo.type, newIndent);
+
+                        const transaction = state.update({
+                            changes: {
+                                from: line.from,
+                                to: line.to,
+                                insert: newListItem,
+                            },
+                            selection: { anchor: line.from + newListItem.length }
+                        });
+                        view.dispatch(transaction);
+
+                        setTimeout(() => {
+                            view.dispatch({
+                                effects: updateListEffect.of({ from: 0, to: state.doc.length }),
+                            });
+                        }, LIST_UPDATE_DELAY);
                     }
                 } else {
-                    // Insert new list item
-                    let newListItem: string;
-                    if (orderedListMatch) {
-                        const nextNumber = parseInt(listMarker) + 1;
-                        newListItem = `\n${indentation}${nextNumber}. `;
-                    } else {
-                        newListItem = `\n${indentation}${listMarker} `;
-                    }
+                    // Create a new list item at the same level
+                    const newListItem = generateListItem(listInfo.type, listInfo.indent);
+                    const insertText = `\n${newListItem}`;
+
                     const transaction = state.update({
                         changes: {
                             from: pos,
                             to: pos,
-                            insert: newListItem,
+                            insert: insertText,
                         },
-                        selection: { anchor: pos + newListItem.length },
+                        selection: { anchor: pos + insertText.length }
                     });
                     view.dispatch(transaction);
+
+                    setTimeout(() => {
+                        view.dispatch({
+                            effects: updateListEffect.of({ from: 0, to: state.doc.length }),
+                        });
+                    }, LIST_UPDATE_DELAY);
                 }
-                view.dispatch({
-                    effects: updateListEffect.of({ from: 0, to: state.doc.length }),
-                });
+
                 return true;
-            } else {
-                return false;
             }
+
+            return false;
+        },
+    },
+    {
+        key: 'Backspace',
+        run: (view: EditorView) => {
+            const { state } = view;
+            const { selection } = state;
+            const pos = selection.main.head;
+            const currentLine = state.doc.lineAt(pos);
+            const currentListInfo = getListInfo(state, pos);
+
+            let previousLineListInfo = null;
+            if (currentLine.number > 1) {
+                const previousLine = state.doc.line(currentLine.number - 1);
+                previousLineListInfo = getListInfo(state, previousLine.from);
+            }
+
+            // If the deletion might affect list numbering, run default action and then trigger an update.
+            if (currentListInfo || previousLineListInfo) {
+                const result = deleteCharBackward(view);
+
+                setTimeout(() => {
+                    view.dispatch({
+                        effects: updateListEffect.of({ from: 0, to: view.state.doc.length }),
+                    });
+                }, LIST_UPDATE_DELAY);
+
+                return result;
+            }
+
+            return false;
+        },
+    },
+    {
+        key: 'Delete',
+        run: (view: EditorView) => {
+            const { state } = view;
+            const { selection } = state;
+            const pos = selection.main.head;
+            const currentLine = state.doc.lineAt(pos);
+            const currentListInfo = getListInfo(state, pos);
+
+            let nextLineListInfo = null;
+            if (currentLine.number < state.doc.lines) {
+                const nextLine = state.doc.line(currentLine.number + 1);
+                nextLineListInfo = getListInfo(state, nextLine.from);
+            }
+
+            if (currentListInfo || nextLineListInfo) {
+                const result = deleteCharForward(view);
+
+                setTimeout(() => {
+                    view.dispatch({
+                        effects: updateListEffect.of({ from: 0, to: view.state.doc.length }),
+                    });
+                }, LIST_UPDATE_DELAY);
+
+                return result;
+            }
+
+            return false;
         },
     },
 ];

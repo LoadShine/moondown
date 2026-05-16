@@ -1,7 +1,7 @@
 import {EditorState} from "@codemirror/state";
-import {SyntaxNode} from "@lezer/common";
-import {parseNode as parse} from "./table-ast";
-import {ParsedTable} from "./types";
+import {type SyntaxNode} from "@lezer/common";
+import {markdownToAST, parseNode as parse, type ASTNode, type Table} from "./table-ast.ts";
+import {type ParsedTable} from "./types.ts";
 
 /**
  * Checks if any of the selections within the given EditorState has overlap with
@@ -33,17 +33,46 @@ export function rangeInSelection (state: EditorState, rangeFrom: number, rangeTo
 export function parseNode (tableNode: SyntaxNode, markdown: string): ParsedTable | undefined {
     const ast = parse(tableNode, markdown)
     if (ast.type === 'Table') {
-        const tableEditorAst = ast.rows.map(row => row.cells.map(cell => markdown.substring(cell.from, cell.to).trim()))
+        return tableAstToParsedTable(ast, markdown)
+    }
+}
 
-        if (tableEditorAst.length === 0) {
-            throw new Error('Cannot instantiate TableEditor: Table had zero rows.')
-        }
+export function parseMarkdownTable(markdown: string): ParsedTable | undefined {
+    const ast = markdownToAST(markdown);
+    const table = findTableAst(ast);
+    if (!table) {
+        return undefined;
+    }
+    return tableAstToParsedTable(table, markdown);
+}
 
-        return {
-            ast: tableEditorAst,
-            colAlignments: ast.alignment ?? tableEditorAst[0].map(_cell => 'left')
+function tableAstToParsedTable(ast: Table, markdown: string): ParsedTable {
+    const tableEditorAst = ast.rows.map(row => row.cells.map(cell => markdown.substring(cell.from, cell.to).trim()))
+
+    if (tableEditorAst.length === 0) {
+        throw new Error('Cannot instantiate TableEditor: Table had zero rows.')
+    }
+
+    return {
+        ast: tableEditorAst,
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        colAlignments: ast.alignment ?? tableEditorAst[0].map(_cell => 'left')
+    }
+}
+
+function findTableAst(node: ASTNode): Table | undefined {
+    if (node.type === 'Table') {
+        return node;
+    }
+    if ('children' in node) {
+        for (const child of node.children) {
+            const table = findTableAst(child);
+            if (table) {
+                return table;
+            }
         }
     }
+    return undefined;
 }
 
 /**

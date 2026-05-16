@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Moondown</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="app-header">
+        <div class="app-header-inner">
+          <div class="brand">
+            <img class="brand-mark" alt="" aria-hidden="true" />
+            <div class="brand-text">
+              <h1>Moondown</h1>
+              <p>A headless Markdown editor.</p>
+            </div>
+          </div>
+          <div class="header-actions">
+            <span class="live-indicator" aria-hidden="true">
+              <span class="live-dot"></span>
+              <span>Live</span>
+            </span>
+          </div>
+        </div>
+      </header>
+
+      <main class="app-main">
+        <section class="editor-stage" aria-label="Markdown editor">
+          <div id="editor"></div>
+        </section>
+
+        <aside class="inspector" aria-label="Editor settings">
+          <section class="settings-group" aria-labelledby="appearanceTitle">
+            <h2 class="group-title" id="appearanceTitle">Appearance</h2>
+            <div class="settings-list">
+              <label class="settings-row settings-row--toggle">
+                <span class="row-label">Dark Mode</span>
+                <span class="ios-switch">
+                  <input type="checkbox" id="toggleTheme" />
+                  <span class="ios-switch-track"></span>
+                </span>
+              </label>
+              <label class="settings-row settings-row--toggle">
+                <span class="row-label">Syntax Hiding</span>
+                <span class="ios-switch">
+                  <input type="checkbox" id="toggleSyntax" checked />
+                  <span class="ios-switch-track"></span>
+                </span>
+              </label>
+              <label class="settings-row settings-row--toggle">
+                <span class="row-label">Read-only</span>
+                <span class="ios-switch">
+                  <input type="checkbox" id="toggleReadonly" />
+                  <span class="ios-switch-track"></span>
+                </span>
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-group" aria-labelledby="accentTitle">
+            <h2 class="group-title" id="accentTitle">Accent Color</h2>
+            <div class="accent-row" role="radiogroup" aria-label="Accent color">
+              <button class="accent-dot" type="button" data-accent="blue" aria-label="Blue" style="--dot-hsl: 211 100% 50%"></button>
+              <button class="accent-dot" type="button" data-accent="purple" aria-label="Purple" style="--dot-hsl: 282 85% 58%"></button>
+              <button class="accent-dot" type="button" data-accent="pink" aria-label="Pink" style="--dot-hsl: 345 100% 59%"></button>
+              <button class="accent-dot" type="button" data-accent="orange" aria-label="Orange" style="--dot-hsl: 36 100% 50%"></button>
+              <button class="accent-dot" type="button" data-accent="green" aria-label="Green" style="--dot-hsl: 142 70% 43%"></button>
+              <button class="accent-dot" type="button" data-accent="graphite" aria-label="Graphite" style="--dot-hsl: 240 2% 40%"></button>
+            </div>
+          </section>
+
+          <section class="settings-group" aria-labelledby="documentTitle">
+            <h2 class="group-title" id="documentTitle">Document</h2>
+            <div class="settings-list">
+              <button class="settings-row settings-row--action" type="button" id="loadBasicDoc">
+                <span class="row-label">Basic Markdown</span>
+                <span class="row-chevron" aria-hidden="true"></span>
+              </button>
+              <button class="settings-row settings-row--action" type="button" id="loadFullDoc">
+                <span class="row-label">Full Markdown Test</span>
+                <span class="row-chevron" aria-hidden="true"></span>
+              </button>
+              <button class="settings-row settings-row--action" type="button" id="replaceContent">
+                <span class="row-label">Insert Timestamp</span>
+                <span class="row-chevron" aria-hidden="true"></span>
+              </button>
+              <button class="settings-row settings-row--action" type="button" id="focusEditor">
+                <span class="row-label">Focus Editor</span>
+                <span class="row-chevron" aria-hidden="true"></span>
+              </button>
+            </div>
+          </section>
+
+          <section class="settings-group" aria-labelledby="aiTitle">
+            <h2 class="group-title" id="aiTitle">AI</h2>
+            <div class="settings-list">
+              <label class="settings-row settings-row--field">
+                <span class="row-label">Mode</span>
+                <select id="aiMode" class="row-control">
+                  <option value="mock">Mock</option>
+                  <option value="real">Real Endpoint</option>
+                </select>
+              </label>
+              <label class="settings-row settings-row--field">
+                <span class="row-label">Locale</span>
+                <input id="localeInput" class="row-control" type="text" value="en" />
+              </label>
+              <label class="settings-row settings-row--field">
+                <span class="row-label">Mock Chunk Size</span>
+                <input id="aiChunkSize" class="row-control" type="number" min="1" value="18" />
+              </label>
+              <label class="settings-row settings-row--field">
+                <span class="row-label">Mock Delay (ms)</span>
+                <input id="aiDelayMs" class="row-control" type="number" min="1" value="35" />
+              </label>
+              <label class="settings-row settings-row--field">
+                <span class="row-label">Endpoint</span>
+                <input id="aiEndpoint" class="row-control" type="text" value="/__ai_stream" />
+              </label>
+              <label class="settings-row settings-row--field">
+                <span class="row-label">Auth Token</span>
+                <input id="aiAuthToken" class="row-control" type="password" value="" autocomplete="off" />
+              </label>
+            </div>
+            <div class="group-actions">
+              <button class="action-button action-button--ghost" type="button" id="resetAISettings">Reset</button>
+              <button class="action-button action-button--primary" type="button" id="applyAISettings">Apply</button>
+            </div>
+          </section>
+
+          <section class="settings-group" aria-labelledby="statusTitle">
+            <h2 class="group-title" id="statusTitle">Status</h2>
+            <div class="settings-list">
+              <div class="settings-row settings-row--readout">
+                <span class="row-label">Theme</span>
+                <span class="row-value" id="themeState">light</span>
+              </div>
+              <div class="settings-row settings-row--readout">
+                <span class="row-label">Syntax</span>
+                <span class="row-value" id="syntaxState">on</span>
+              </div>
+              <div class="settings-row settings-row--readout">
+                <span class="row-label">Read-only</span>
+                <span class="row-value" id="readonlyState">off</span>
+              </div>
+              <div class="settings-row settings-row--readout">
+                <span class="row-label">Accent</span>
+                <span class="row-value" id="accentState">blue</span>
+              </div>
+              <div class="settings-row settings-row--readout">
+                <span class="row-label">AI Mode</span>
+                <span class="row-value" id="aiModeState">mock</span>
+              </div>
+              <div class="settings-row settings-row--readout">
+                <span class="row-label">Locale</span>
+                <span class="row-value" id="localeState">en</span>
+              </div>
+              <div class="settings-row settings-row--readout">
+                <span class="row-label">Endpoint</span>
+                <span class="row-value row-value--mono" id="aiEndpointState">/__ai_stream</span>
+              </div>
+            </div>
+          </section>
+        </aside>
+      </main>
+
+      <section class="snapshot" aria-label="Markdown snapshot">
+        <header class="snapshot-header">
+          <div class="snapshot-title">
+            <h2>Snapshot</h2>
+            <p>Live Markdown source</p>
+          </div>
+          <button class="action-button action-button--ghost action-button--small" type="button" id="logValue">Refresh</button>
+        </header>
+        <pre id="snapshot"></pre>
+      </section>
+    </div>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

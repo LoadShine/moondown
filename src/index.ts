@@ -1,4 +1,6 @@
 import Moondown from './moondown';
-import '@/assets/index.css';
 
+export { Moondown };
 export default Moondown;
+export * from './core';
+export * from './plugins';

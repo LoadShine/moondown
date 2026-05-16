@@ -1,7 +1,7 @@
 import type {SyntaxNode} from '@lezer/common'
-import {type ASTNode, parseNode, type MDNode} from './table-ast'
+import {type ASTNode, parseNode, type MDNode} from './table-ast.ts'
 import {genericTextNode} from './generic-text-node.ts'
-import {getWhitespaceBeforeNode} from "./table-functions";
+import {getWhitespaceBeforeNode} from "./table-functions.ts";
 
 /**
  * This list contains all Node names that do not themselves have any content.
