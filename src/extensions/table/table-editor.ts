@@ -20,6 +20,16 @@ import {
 } from './table-editor-dom.ts';
 
 const BLUR_DELAY_MS = 50;
+const FLOATING_CONTROL_SYNC_DELAY_MS = 30;
+
+interface RebuildOptions {
+    select?: TableSelection;
+    forceFocus?: boolean;
+}
+
+interface SelectCellOptions {
+    forceFocus?: boolean;
+}
 
 export default class TableEditor {
     private _rowIndex = 0;
@@ -29,6 +39,9 @@ export default class TableEditor {
     private _lastSeenTable: string;
     private _lastMousemoveEvent: MouseEvent | undefined;
     private _pendingBlur: number | null = null;
+    private _floatingControlSyncTimer: number | null = null;
+    private _resizeObserver: ResizeObserver | null = null;
+    private readonly _lifecycle = new AbortController();
 
     private readonly _options: TableEditorOptions;
     private readonly _containerElement: HTMLElement;
@@ -54,13 +67,13 @@ export default class TableEditor {
             rowAnchor: this._edgeButtons.addLeftButton,
             columnAnchor: this._edgeButtons.addTopButton,
             handlers: {
-                prependRow: () => this.prependRow(),
-                appendRow: () => this.appendRow(),
-                pluckRow: () => this.pluckRow(),
-                prependCol: () => this.prependCol(),
-                appendCol: () => this.appendCol(),
-                pluckCol: () => this.pluckCol(),
-                changeColAlignment: (alignment) => this.changeColAlignment(alignment),
+                prependRow: (rowIndex) => this.prependRow(rowIndex),
+                appendRow: (rowIndex) => this.appendRow(rowIndex),
+                pluckRow: (rowIndex) => this.pluckRow(rowIndex),
+                prependCol: (colIndex) => this.prependCol(colIndex),
+                appendCol: (colIndex) => this.appendCol(colIndex),
+                pluckCol: (colIndex) => this.pluckCol(colIndex),
+                changeColAlignment: (alignment, colIndex) => this.changeColAlignment(alignment, colIndex),
             },
             onCommit: () => {
                 this._options.saveIntent?.(this);
@@ -71,6 +84,7 @@ export default class TableEditor {
         if (!this._options.readOnly) {
             this._bindContainerEvents();
             this._bindEdgeButtonEvents();
+            this._bindGeometryEvents();
         }
         this._injectCSS();
     }
@@ -79,30 +93,67 @@ export default class TableEditor {
         this._containerElement.addEventListener('mouseover', (event) => {
             this._moveHelper(event);
             this._lastMousemoveEvent = event;
-        });
+        }, { signal: this._lifecycle.signal });
 
         this._containerElement.addEventListener('mousedown', (event) => {
+            this._captureCellFromPointerEvent(event);
             this._clickHelper(event);
             this._lastMousemoveEvent = event;
-        });
+        }, { signal: this._lifecycle.signal });
 
         this._containerElement.addEventListener('mouseover', (event) => {
             if (this._lastMousemoveEvent !== event) {
                 this._hideAllButtons();
             }
-        });
+        }, { signal: this._lifecycle.signal });
     }
 
     private _bindEdgeButtonEvents(): void {
         this._edgeButtons.addTopButton.addEventListener('mousedown', (event) => {
             event.preventDefault();
-            this._actionsPopover.showColumnActions();
-        });
+            this._actionsPopover.showColumnActions(this._cellIndex);
+        }, { signal: this._lifecycle.signal });
 
         this._edgeButtons.addLeftButton.addEventListener('mousedown', (event) => {
             event.preventDefault();
-            this._actionsPopover.showRowActions();
-        });
+            this._actionsPopover.showRowActions(this._rowIndex);
+        }, { signal: this._lifecycle.signal });
+    }
+
+    private _bindGeometryEvents(): void {
+        const sync = () => this._scheduleFloatingControlSync();
+
+        window.addEventListener('resize', sync, { signal: this._lifecycle.signal });
+        window.visualViewport?.addEventListener('resize', sync, { signal: this._lifecycle.signal });
+        window.visualViewport?.addEventListener('scroll', sync, { signal: this._lifecycle.signal });
+        this._containerElement.addEventListener('scroll', sync, { passive: true, signal: this._lifecycle.signal });
+
+        if (typeof ResizeObserver !== 'undefined') {
+            this._resizeObserver = new ResizeObserver(sync);
+            this._resizeObserver.observe(this._containerElement);
+            this._resizeObserver.observe(this._elem);
+        }
+    }
+
+    private _scheduleFloatingControlSync(): void {
+        if (this._floatingControlSyncTimer !== null) {
+            window.clearTimeout(this._floatingControlSyncTimer);
+        }
+
+        this._floatingControlSyncTimer = window.setTimeout(() => {
+            this._floatingControlSyncTimer = null;
+            this._syncFloatingControls();
+        }, FLOATING_CONTROL_SYNC_DELAY_MS);
+        requestAnimationFrame(() => this._syncFloatingControls());
+    }
+
+    private _syncFloatingControls(): void {
+        if (this._options.readOnly || (!this._edgeButtons.visible && !this._hasFocusedCell())) {
+            return;
+        }
+
+        this._showEdgeButtons();
+        this._actionsPopover.updatePosition();
     }
 
     _moveHelper(event: MouseEvent): void {
@@ -141,7 +192,18 @@ export default class TableEditor {
         this._hideAllButtons();
     }
 
-    _rebuildDOMElement(): void {
+    private _captureCellFromPointerEvent(event: MouseEvent): void {
+        const target = event.target instanceof Element ? event.target : null;
+        const cell = target?.closest<HTMLTableCellElement>('td');
+        if (!cell || !this._elem.contains(cell)) {
+            return;
+        }
+
+        this._rowIndex = (cell.parentElement as HTMLTableRowElement).rowIndex;
+        this._cellIndex = cell.cellIndex;
+    }
+
+    _rebuildDOMElement(options: RebuildOptions = {}): void {
         this._eventLock = true;
         rebuildEditableTableDom({
             table: this._elem,
@@ -153,7 +215,9 @@ export default class TableEditor {
         });
         this._eventLock = false;
 
-        this.selectCell('start');
+        if (options.select) {
+            this.selectCell(options.select, { forceFocus: options.forceFocus });
+        }
     }
 
     _onCellBlur(cell: HTMLTableCellElement): void {
@@ -394,51 +458,54 @@ export default class TableEditor {
         this._options.onCellChange?.(this);
     }
 
-    prependCol(): void {
+    prependCol(colIndex: number = this._cellIndex): void {
         if (this._options.readOnly) {
             return;
         }
+        this._cellIndex = colIndex;
         this._model.prependColumn(this._cellIndex);
-        this._rebuildDOMElement();
+        this._rebuildDOMElement({ select: 'start', forceFocus: true });
         this._signalContentChange();
     }
 
-    appendCol(): void {
+    appendCol(colIndex: number = this._cellIndex): void {
         if (this._options.readOnly) {
             return;
         }
+        this._cellIndex = colIndex;
         this._model.appendColumn(this._cellIndex);
-        this._rebuildDOMElement();
-
-        this.nextCell();
+        this._cellIndex += 1;
+        this._rebuildDOMElement({ select: 'start', forceFocus: true });
         this._signalContentChange();
     }
 
-    prependRow(): void {
+    prependRow(rowIndex: number = this._rowIndex): void {
         if (this._options.readOnly) {
             return;
         }
+        this._rowIndex = rowIndex;
         this._model.prependRow(this._rowIndex);
-        this._rebuildDOMElement();
+        this._rebuildDOMElement({ select: 'start', forceFocus: true });
         this._signalContentChange();
     }
 
-    appendRow(): void {
+    appendRow(rowIndex: number = this._rowIndex): void {
         if (this._options.readOnly) {
             return;
         }
+        this._rowIndex = rowIndex;
         this._model.appendRow(this._rowIndex);
-        this._rebuildDOMElement();
-
-        this.nextRow();
+        this._rowIndex += 1;
+        this._rebuildDOMElement({ select: 'start', forceFocus: true });
         this._recalculateEdgeButtonPositions();
         this._signalContentChange();
     }
 
-    pluckRow(): void {
+    pluckRow(rowIndex: number = this._rowIndex): void {
         if (this._options.readOnly) {
             return;
         }
+        this._rowIndex = rowIndex;
         const rowToRemove = this._rowIndex;
         const firstRow = rowToRemove === 0;
 
@@ -446,28 +513,18 @@ export default class TableEditor {
             return;
         }
 
-        if (firstRow) {
-            this._rowIndex += 1;
-        } else {
-            this._rowIndex -= 1;
-        }
-
-        this.selectCell('start');
-        this._rebuildDOMElement();
-
-        if (firstRow) {
-            this._rowIndex = 0;
-            this.selectCell('start');
-        }
+        this._rowIndex = firstRow ? 0 : Math.max(0, this._rowIndex - 1);
+        this._rebuildDOMElement({ select: 'start', forceFocus: true });
 
         this._signalContentChange();
         this._options.onCellChange?.(this);
     }
 
-    pluckCol(): void {
+    pluckCol(colIndex: number = this._cellIndex): void {
         if (this._options.readOnly) {
             return;
         }
+        this._cellIndex = colIndex;
         const colToRemove = this._cellIndex;
         const firstCol = colToRemove === 0;
 
@@ -475,19 +532,8 @@ export default class TableEditor {
             return;
         }
 
-        if (firstCol) {
-            this._cellIndex = 1;
-        } else {
-            this._cellIndex -= 1;
-        }
-
-        this.selectCell('start');
-        this._rebuildDOMElement();
-
-        if (firstCol) {
-            this._cellIndex = 0;
-            this.selectCell('start');
-        }
+        this._cellIndex = firstCol ? 0 : Math.max(0, this._cellIndex - 1);
+        this._rebuildDOMElement({ select: 'start', forceFocus: true });
 
         this._signalContentChange();
         this._options.onCellChange?.(this);
@@ -507,19 +553,35 @@ export default class TableEditor {
         this._options.onCellChange?.(this);
     }
 
-    selectCell(where: TableSelection = 'end'): void {
+    selectCell(where: TableSelection = 'end', options: SelectCellOptions = {}): void {
         if (
             !selectEditableCell({
                 table: this._elem,
                 rowIndex: this._rowIndex,
                 cellIndex: this._cellIndex,
                 where,
+                forceFocus: options.forceFocus,
             })
         ) {
             return;
         }
 
         this._recalculateEdgeButtonPositions();
+    }
+
+    destroy(): void {
+        this._lifecycle.abort();
+        if (this._pendingBlur !== null) {
+            window.clearTimeout(this._pendingBlur);
+            this._pendingBlur = null;
+        }
+        if (this._floatingControlSyncTimer !== null) {
+            window.clearTimeout(this._floatingControlSyncTimer);
+            this._floatingControlSyncTimer = null;
+        }
+        this._resizeObserver?.disconnect();
+        this._actionsPopover.destroy();
+        this._edgeButtons.hide();
     }
 
     _injectCSS(): void {

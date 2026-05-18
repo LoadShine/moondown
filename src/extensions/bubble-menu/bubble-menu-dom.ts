@@ -45,11 +45,12 @@ function createSubMenuButton(
     return subButton;
 }
 
-function mountIcons(): void {
+function mountIcons(root: HTMLElement): void {
     setTimeout(() => {
         createIcons({
             icons,
             attrs: ICON_SIZES.MEDIUM,
+            root,
         });
     }, 0);
 }
@@ -121,5 +122,5 @@ export function renderBubbleMenuDom({
         dom.appendChild(button);
     }
 
-    mountIcons();
+    mountIcons(dom);
 }

@@ -11,6 +11,7 @@ class TableWidget extends WidgetType {
 
     private readonly widgetId: number;
     private domElement: HTMLElement | null = null;
+    private editor: TableEditor | null = null;
     private readonly saveController = new TableWidgetSaveController();
 
     constructor(
@@ -40,6 +41,7 @@ class TableWidget extends WidgetType {
                 container: view.scrollDOM,
             });
 
+            this.editor = editor;
             this.domElement = editor.domElement;
             this.domElement.dataset.widgetId = String(this.widgetId);
             this.domElement.dataset.originalFrom = String(this.originalFrom);
@@ -66,6 +68,12 @@ class TableWidget extends WidgetType {
             }
         }
         return true;
+    }
+
+    destroy(): void {
+        this.editor?.destroy();
+        this.editor = null;
+        this.domElement = null;
     }
 
     private saveContent(view: EditorView, editor: TableEditor): void {

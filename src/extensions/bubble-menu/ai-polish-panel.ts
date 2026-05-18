@@ -66,6 +66,7 @@ export class AIPolishPanel {
             createIcons({
                 icons,
                 attrs: {width: '14', height: '14', "stroke-width": "2.5"},
+                root: this.dom,
             });
         });
     }

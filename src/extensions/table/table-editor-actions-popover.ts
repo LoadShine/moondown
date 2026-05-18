@@ -19,13 +19,13 @@ const ICON_SIZE = {
 };
 
 interface TableActionPopoverHandlers {
-    prependRow: () => void;
-    appendRow: () => void;
-    pluckRow: () => void;
-    prependCol: () => void;
-    appendCol: () => void;
-    pluckCol: () => void;
-    changeColAlignment: (alignment: ColAlignment) => void;
+    prependRow: (rowIndex: number) => void;
+    appendRow: (rowIndex: number) => void;
+    pluckRow: (rowIndex: number) => void;
+    prependCol: (colIndex: number) => void;
+    appendCol: (colIndex: number) => void;
+    pluckCol: (colIndex: number) => void;
+    changeColAlignment: (alignment: ColAlignment, colIndex: number) => void;
 }
 
 interface TableActionPopoverOptions {
@@ -43,10 +43,18 @@ interface ActionConfig {
 
 function createActionButton(action: ActionConfig): HTMLButtonElement {
     const button = document.createElement('button');
+    button.type = 'button';
     button.innerHTML = `<i data-lucide="${action.icon}"></i>`;
     button.title = action.title;
     button.className = 'tippy-button';
-    button.addEventListener('click', action.action);
+    button.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+    });
+    button.addEventListener('click', (event) => {
+        event.stopPropagation();
+        action.action(event);
+    });
     return button;
 }
 
@@ -56,61 +64,73 @@ function createPopoverContainer(): HTMLDivElement {
     return container;
 }
 
-function mountIcons(iconSet: Icons): void {
+function mountIcons(root: HTMLElement, iconSet: Icons): void {
     setTimeout(() => {
         createIcons({
             icons: iconSet,
             attrs: ICON_SIZE,
+            root,
         });
     }, 0);
 }
 
 export class TableEditorActionsPopover {
     private tippyInstance: TippyInstance | null = null;
+    private alignmentTippyInstance: TippyInstance | null = null;
 
     constructor(private readonly options: TableActionPopoverOptions) {}
 
     destroy(): void {
+        this.alignmentTippyInstance?.destroy();
+        this.alignmentTippyInstance = null;
         this.tippyInstance?.destroy();
         this.tippyInstance = null;
     }
 
-    showRowActions(): void {
+    updatePosition(): void {
+        void this.tippyInstance?.popperInstance?.update();
+    }
+
+    showRowActions(rowIndex: number): void {
         this.destroy();
-        const content = this.createRowActionsContent();
+        const content = this.createRowActionsContent(rowIndex);
         this.tippyInstance = tippy(this.options.rowAnchor, {
             content,
             interactive: true,
             theme: 'custom',
             placement: 'right',
             trigger: 'manual',
+            hideOnClick: false,
+            appendTo: () => document.body,
             arrow: true,
         });
         this.tippyInstance.show();
     }
 
-    showColumnActions(): void {
+    showColumnActions(colIndex: number): void {
         this.destroy();
-        const content = this.createColumnActionsContent();
+        const content = this.createColumnActionsContent(colIndex);
         this.tippyInstance = tippy(this.options.columnAnchor, {
             content,
             interactive: true,
             theme: 'custom',
             placement: 'bottom',
             trigger: 'manual',
+            hideOnClick: false,
+            appendTo: () => document.body,
             arrow: true,
         });
         this.tippyInstance.show();
     }
 
-    private createRowActionsContent(): HTMLElement {
+    private createRowActionsContent(rowIndex: number): HTMLElement {
         const container = createPopoverContainer();
         const actions: ActionConfig[] = [
             {
                 icon: 'arrow-up-to-line',
                 title: 'Insert row above',
                 action: () => {
-                    this.options.handlers.prependRow();
+                    this.options.handlers.prependRow(rowIndex);
                     this.tippyInstance?.hide();
                     this.options.onCommit();
                 },
@@ -119,7 +139,7 @@ export class TableEditorActionsPopover {
                 icon: 'arrow-down-to-line',
                 title: 'Insert row below',
                 action: () => {
-                    this.options.handlers.appendRow();
+                    this.options.handlers.appendRow(rowIndex);
                     this.tippyInstance?.hide();
                     this.options.onCommit();
                 },
@@ -128,7 +148,7 @@ export class TableEditorActionsPopover {
                 icon: 'trash-2',
                 title: 'Delete this row',
                 action: () => {
-                    this.options.handlers.pluckRow();
+                    this.options.handlers.pluckRow(rowIndex);
                     this.tippyInstance?.hide();
                     this.options.onCommit();
                 },
@@ -139,18 +159,18 @@ export class TableEditorActionsPopover {
             container.appendChild(createActionButton(action));
         }
 
-        mountIcons({ ArrowUpToLine, ArrowDownToLine, Trash2 });
+        mountIcons(container, { ArrowUpToLine, ArrowDownToLine, Trash2 });
         return container;
     }
 
-    private createColumnActionsContent(): HTMLElement {
+    private createColumnActionsContent(colIndex: number): HTMLElement {
         const container = createPopoverContainer();
         const actions: ActionConfig[] = [
             {
                 icon: 'arrow-left-to-line',
                 title: 'Insert column to the left',
                 action: () => {
-                    this.options.handlers.prependCol();
+                    this.options.handlers.prependCol(colIndex);
                     this.tippyInstance?.hide();
                     this.options.onCommit();
                 },
@@ -159,7 +179,7 @@ export class TableEditorActionsPopover {
                 icon: 'arrow-right-to-line',
                 title: 'Insert column to the right',
                 action: () => {
-                    this.options.handlers.appendCol();
+                    this.options.handlers.appendCol(colIndex);
                     this.tippyInstance?.hide();
                     this.options.onCommit();
                 },
@@ -168,7 +188,7 @@ export class TableEditorActionsPopover {
                 icon: 'trash-2',
                 title: 'Delete this column',
                 action: () => {
-                    this.options.handlers.pluckCol();
+                    this.options.handlers.pluckCol(colIndex);
                     this.tippyInstance?.hide();
                     this.options.onCommit();
                 },
@@ -176,7 +196,7 @@ export class TableEditorActionsPopover {
             {
                 icon: 'align-center',
                 title: 'Alignment',
-                action: (event) => this.showAlignmentOptions(event.currentTarget as HTMLElement),
+                action: (event) => this.showAlignmentOptions(event.currentTarget as HTMLElement, colIndex),
             },
         ];
 
@@ -184,11 +204,13 @@ export class TableEditorActionsPopover {
             container.appendChild(createActionButton(action));
         }
 
-        mountIcons({ ArrowLeftToLine, ArrowRightToLine, Trash2, AlignCenter });
+        mountIcons(container, { ArrowLeftToLine, ArrowRightToLine, Trash2, AlignCenter });
         return container;
     }
 
-    private showAlignmentOptions(target: HTMLElement): void {
+    private showAlignmentOptions(target: HTMLElement, colIndex: number): void {
+        this.alignmentTippyInstance?.destroy();
+        this.alignmentTippyInstance = null;
         const alignmentContainer = createPopoverContainer();
         alignmentContainer.classList.add('alignment-options');
 
@@ -219,7 +241,8 @@ export class TableEditorActionsPopover {
                 icon: alignOption.icon,
                 title: alignOption.title,
                 action: () => {
-                    this.options.handlers.changeColAlignment(alignOption.alignment);
+                    this.options.handlers.changeColAlignment(alignOption.alignment, colIndex);
+                    this.alignmentTippyInstance?.hide();
                     this.tippyInstance?.hide();
                     this.options.onCommit();
                 },
@@ -227,16 +250,18 @@ export class TableEditorActionsPopover {
             alignmentContainer.appendChild(button);
         }
 
-        const instance = tippy(target, {
+        this.alignmentTippyInstance = tippy(target, {
             content: alignmentContainer,
             interactive: true,
             theme: 'custom',
             placement: 'bottom',
             trigger: 'manual',
+            hideOnClick: false,
+            appendTo: () => document.body,
             arrow: true,
         });
-        instance.show();
+        this.alignmentTippyInstance.show();
 
-        mountIcons({ AlignLeft, AlignCenter, AlignRight });
+        mountIcons(alignmentContainer, { AlignLeft, AlignCenter, AlignRight });
     }
 }

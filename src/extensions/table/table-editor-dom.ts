@@ -52,12 +52,13 @@ interface SelectEditableCellOptions {
     rowIndex: number;
     cellIndex: number;
     where: TableSelection;
+    forceFocus?: boolean;
 }
 
 export function selectEditableCell(options: SelectEditableCellOptions): boolean {
-    const { table, rowIndex, cellIndex, where } = options;
+    const { table, rowIndex, cellIndex, where, forceFocus = false } = options;
 
-    if (!table.contains(document.activeElement)) {
+    if (!forceFocus && !table.contains(document.activeElement)) {
         return false;
     }
 

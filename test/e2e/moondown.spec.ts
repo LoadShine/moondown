@@ -55,6 +55,37 @@ async function focusEditorAtText(page: Page, needle: string, offset = 0): Promis
   }, { needle, offset });
 }
 
+async function getEditorSelection(page: Page): Promise<{ from: number; to: number; selectedText: string }> {
+  return page.evaluate(() => {
+    const editor = (window as any).__MOONDOWN_PLAYGROUND_EDITOR__;
+    if (!editor) {
+      throw new Error('Playground editor handle is unavailable');
+    }
+
+    const view = editor.getView();
+    const selection = view.state.selection.main;
+    return {
+      from: selection.from,
+      to: selection.to,
+      selectedText: view.state.sliceDoc(selection.from, selection.to),
+    };
+  });
+}
+
+async function openTableColumnPopover(page: Page): Promise<void> {
+  await page.locator('.table-helper td').first().click();
+  await expect(page.locator('.table-helper-operate-button.top')).toHaveClass(/is-visible/);
+  await page.locator('.table-helper-operate-button.top').click();
+  await expect(page.locator('.table-action-popover .tippy-button[title="Insert column to the right"]').last()).toBeVisible();
+}
+
+async function openTableRowPopover(page: Page): Promise<void> {
+  await page.locator('.table-helper td').first().click();
+  await expect(page.locator('.table-helper-operate-button.left')).toHaveClass(/is-visible/);
+  await page.locator('.table-helper-operate-button.left').click();
+  await expect(page.locator('.table-action-popover .tippy-button[title="Insert row below"]').last()).toBeVisible();
+}
+
 test.describe('Moondown playground e2e', () => {
   test('page should load and render editor', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
@@ -749,6 +780,149 @@ test.describe('Moondown playground e2e', () => {
 
     const popoverHeight = await popover.evaluate((element) => element.getBoundingClientRect().height);
     expect(popoverHeight).toBeLessThanOrEqual(44);
+
+    await page.locator('.tippy-button[title="Alignment"]').click();
+    await expect(page.locator('.alignment-options .tippy-button[title="Align right"]').last()).toBeVisible();
+    await page.locator('.alignment-options .tippy-button[title="Align right"]').last().click();
+    await expect.poll(async () =>
+      page.locator('.table-helper tr').evaluateAll((rows) =>
+        rows.map((row) => Array.from(row.children).map((cell) => getComputedStyle(cell).textAlign))
+      )
+    ).toEqual([
+      ['right', 'left'],
+      ['right', 'left'],
+    ]);
+  });
+
+  test('table handler popover actions should mutate rows, columns, and alignment in markdown', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+
+    await setEditorValue(page, ['| A | B |', '| - | - |', '| 1 | 2 |', ''].join('\n'));
+
+    await openTableColumnPopover(page);
+    await page.locator('.table-action-popover .tippy-button[title="Insert column to the right"]').last().click();
+    await expect.poll(() => getEditorValue(page)).toContain('| A |  | B |');
+
+    await openTableColumnPopover(page);
+    await page.locator('.table-action-popover .tippy-button[title="Alignment"]').last().click();
+    await expect(page.locator('.alignment-options .tippy-button[title="Align right"]').last()).toBeVisible();
+    await page.locator('.alignment-options .tippy-button[title="Align right"]').last().click();
+    await expect.poll(async () => /\|[-:]+\|/.test(await getEditorValue(page))).toBe(true);
+    await expect.poll(() => getEditorValue(page)).toContain('|--:|');
+
+    await openTableColumnPopover(page);
+    await page.locator('.table-action-popover .tippy-button[title="Delete this column"]').last().click();
+    await expect.poll(() => getEditorValue(page)).not.toContain('| A |  | B |');
+    await expect.poll(() => getEditorValue(page)).toContain('|  | B |');
+
+    await openTableRowPopover(page);
+    await page.locator('.table-action-popover .tippy-button[title="Insert row below"]').last().click();
+    await expect.poll(async () => {
+      const value = await getEditorValue(page);
+      return value.split('\n').filter((line) => line.startsWith('|')).length;
+    }).toBe(4);
+
+    await openTableRowPopover(page);
+    await page.locator('.table-action-popover .tippy-button[title="Delete this row"]').last().click();
+    await expect.poll(async () => {
+      const value = await getEditorValue(page);
+      return value.split('\n').filter((line) => line.startsWith('|')).length;
+    }).toBe(3);
+  });
+
+  test('ordered list enter should keep the caret in the new list item instead of jumping to document start', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+
+    await setEditorValue(page, ['Intro', '', '1. One', '2. Two', '', 'Tail', ''].join('\n'));
+    await focusEditorAtText(page, '1. One', '1. One'.length);
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Fresh');
+
+    const value = await getEditorValue(page);
+    expect(value).toContain(['1. One', '2. Fresh', '3. Two'].join('\n'));
+    expect(value.startsWith('Fresh')).toBe(false);
+
+    const selection = await getEditorSelection(page);
+    expect(selection.from).toBeGreaterThan(value.indexOf('2. Fresh'));
+  });
+
+  test('table and slash hit targets should stay aligned after viewport resize', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.setViewportSize({ width: 900, height: 680 });
+
+    await setEditorValue(page, ['Resize regression', '', '| A | B |', '| - | - |', '| 1 | 2 |', '', 'After', ''].join('\n'));
+    await page.locator('.table-helper td').first().click();
+    await expect(page.locator('.table-helper-operate-button.top')).toHaveClass(/is-visible/);
+
+    await page.setViewportSize({ width: 1440, height: 920 });
+    await page.waitForTimeout(120);
+
+    const firstCell = page.locator('.table-helper td').first();
+    const cellBox = await firstCell.boundingBox();
+    if (!cellBox) throw new Error('Table cell is unavailable after resize');
+    await page.mouse.click(cellBox.x + cellBox.width / 2, cellBox.y + cellBox.height / 2);
+
+    await expect.poll(() => page.evaluate(() => {
+      const active = document.activeElement;
+      return active instanceof HTMLTableCellElement ? active.textContent : null;
+    })).toBe('A');
+
+    await focusEditorAtText(page, 'After', 'After'.length);
+    await page.keyboard.type('\n/');
+    await expect.poll(() => page.evaluate(() => {
+      const editor = (window as any).__MOONDOWN_PLAYGROUND_EDITOR__;
+      const view = editor.getView();
+      const caret = view.coordsAtPos(view.state.selection.main.from);
+      const menu = document.querySelector('.cm-slash-command-menu') as HTMLElement | null;
+      const rect = menu?.getBoundingClientRect();
+      return Boolean(caret && rect && Math.abs(rect.left - caret.left) < 12);
+    })).toBe(true);
+
+    await page.setViewportSize({ width: 1024, height: 760 });
+    await page.waitForTimeout(160);
+
+    await expect.poll(() => page.evaluate(() => {
+      const editor = (window as any).__MOONDOWN_PLAYGROUND_EDITOR__;
+      const view = editor.getView();
+      const caret = view.coordsAtPos(view.state.selection.main.from);
+      const menu = document.querySelector('.cm-slash-command-menu') as HTMLElement | null;
+      const rect = menu?.getBoundingClientRect();
+      return Boolean(caret && rect && Math.abs(rect.left - caret.left) < 12);
+    })).toBe(true);
+  });
+
+  test('slash menu should close when the user moves from slash input into a table cell', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+
+    await setEditorValue(page, [
+      'Start',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '| A | B |',
+      '| - | - |',
+      '| 1 | 2 |',
+      '',
+      'End',
+      '',
+    ].join('\n'));
+    await focusEditorAtText(page, 'Start', 'Start'.length);
+    await page.keyboard.type('\n/');
+    await expect(page.locator('.cm-slash-command-menu')).toBeVisible();
+
+    await page.locator('.table-helper td').first().click();
+    await expect(page.locator('.cm-slash-command-menu')).toBeHidden();
   });
 
   test('slash commands should execute the full built-in insertion surface', async ({ page }) => {

@@ -17,17 +17,21 @@ import {MoondownTranslations} from "../../core";
  * A CodeMirror ViewPlugin that manages the rendering and interaction of the slash command menu.
  */
 export const slashCommandPlugin = ViewPlugin.fromClass(class {
+    view: EditorView;
     editorDom: HTMLElement;
     menu: HTMLElement;
     currentAbortController: AbortController | null;
     debouncedUpdate: (update: ViewUpdate) => void;
-    handleEditorClick: () => void;
+    handleEditorPointerDown: (event: MouseEvent) => void;
     handleDocumentClick: (event: MouseEvent) => void;
+    handleViewportChange: () => void;
     destroyed: boolean;
 
     constructor(view: EditorView) {
+        this.view = view;
         this.editorDom = view.dom;
         this.menu = createElement('div', CSS_CLASSES.SLASH_COMMAND_MENU);
+        this.menu.style.visibility = 'hidden';
         view.dom.appendChild(this.menu);
         this.currentAbortController = null;
         this.destroyed = false;
@@ -35,8 +39,39 @@ export const slashCommandPlugin = ViewPlugin.fromClass(class {
             (update: ViewUpdate) => this.updateMenu(update),
             TIMING.DEBOUNCE_DELAY
         );
-        this.handleEditorClick = () => {
+        this.handleEditorPointerDown = (event: MouseEvent) => {
+            if (this.destroyed) {
+                return;
+            }
+
+            const target = event.target as Node | null;
+            if (target && this.menu.contains(target)) {
+                return;
+            }
+
+            const state = this.view.state.field(slashCommandState);
+            if (state.active) {
+                this.view.dispatch({
+                    effects: toggleSlashCommand.of(false),
+                });
+            }
+            this.hide();
             this.abortAIContinuation();
+        };
+        this.handleViewportChange = () => {
+            if (this.destroyed) {
+                return;
+            }
+            const state = this.view.state.field(slashCommandState);
+            if (!state.active) {
+                return;
+            }
+            requestAnimationFrame(() => {
+                if (this.destroyed) {
+                    return;
+                }
+                this.positionMenu(this.view, this.view.state.selection.main.from);
+            });
         };
         this.handleDocumentClick = (e: MouseEvent) => {
             if (this.destroyed) {
@@ -50,8 +85,11 @@ export const slashCommandPlugin = ViewPlugin.fromClass(class {
             }
         };
 
-        view.dom.addEventListener('click', this.handleEditorClick);
+        view.dom.addEventListener('mousedown', this.handleEditorPointerDown, true);
         document.addEventListener('click', this.handleDocumentClick);
+        window.addEventListener('resize', this.handleViewportChange);
+        window.visualViewport?.addEventListener('resize', this.handleViewportChange);
+        window.visualViewport?.addEventListener('scroll', this.handleViewportChange);
     }
 
     update(update: ViewUpdate): void {
@@ -77,25 +115,7 @@ export const slashCommandPlugin = ViewPlugin.fromClass(class {
 
         this.show();
 
-        requestAnimationFrame(() => {
-            if (this.destroyed || !this.menu.isConnected) {
-                return;
-            }
-
-            const pos = update.view.coordsAtPos(state.pos);
-            if (pos) {
-                const editorRect = update.view.dom.getBoundingClientRect();
-                const menuRect = this.menu.getBoundingClientRect();
-
-                if (pos.top + menuRect.height > editorRect.bottom) {
-                    this.menu.style.top = `${pos.top - editorRect.top - menuRect.height}px`;
-                } else {
-                    this.menu.style.top = `${pos.top - editorRect.top + 20}px`;
-                }
-
-                this.menu.style.left = `${pos.left - editorRect.left}px`;
-            }
-        });
+        requestAnimationFrame(() => this.positionMenu(update.view, update.state.selection.main.from));
 
         const filteredCommands = resolveFilteredSlashCommands(pluginCommands, state.filterText, translations);
         const selectedIndex = normalizeSelectedSlashCommandIndex(filteredCommands, state.selectedIndex);
@@ -158,8 +178,10 @@ export const slashCommandPlugin = ViewPlugin.fromClass(class {
             createIcons({
                 icons,
                 attrs: ICON_SIZES.MEDIUM,
+                root: this.menu,
             });
 
+            this.positionMenu(view, view.state.selection.main.from);
             this.scrollSelectedIntoView();
         });
     }
@@ -229,6 +251,53 @@ export const slashCommandPlugin = ViewPlugin.fromClass(class {
 
     hide(): void {
         this.menu.style.display = "none";
+        this.menu.style.visibility = 'hidden';
+    }
+
+    positionMenu(view: EditorView, position: number): void {
+        if (this.destroyed || !this.menu.isConnected) {
+            return;
+        }
+
+        const coords = view.coordsAtPos(position) ?? view.coordsAtPos(Math.max(0, position - 1));
+        if (!coords) {
+            return;
+        }
+
+        const maxMenuHeight = 320;
+        const minMenuHeight = 96;
+        this.menu.style.maxHeight = `${maxMenuHeight}px`;
+
+        const editorRect = view.dom.getBoundingClientRect();
+        const scrollRect = view.scrollDOM.getBoundingClientRect();
+        const menuRect = this.menu.getBoundingClientRect();
+        const gap = 6;
+        const margin = 8;
+
+        const minLeft = scrollRect.left + margin;
+        const maxLeft = Math.max(minLeft, scrollRect.right - menuRect.width - margin);
+        const viewportLeft = Math.min(maxLeft, Math.max(minLeft, coords.left));
+
+        const spaceBelow = Math.max(0, scrollRect.bottom - coords.bottom - gap - margin);
+        const spaceAbove = Math.max(0, coords.top - scrollRect.top - gap - margin);
+        const openAbove = spaceBelow < menuRect.height && spaceAbove > spaceBelow;
+        const availableHeight = openAbove ? spaceAbove : spaceBelow;
+        const constrainedHeight = Math.min(maxMenuHeight, Math.max(minMenuHeight, availableHeight));
+        this.menu.style.maxHeight = `${constrainedHeight}px`;
+
+        const menuHeight = Math.min(menuRect.height, constrainedHeight);
+        let viewportTop = openAbove
+            ? coords.top - menuHeight - gap
+            : coords.bottom + gap;
+
+        viewportTop = Math.min(
+            Math.max(scrollRect.top + margin, viewportTop),
+            Math.max(scrollRect.top + margin, scrollRect.bottom - menuHeight - margin)
+        );
+
+        this.menu.style.left = `${viewportLeft - editorRect.left}px`;
+        this.menu.style.top = `${viewportTop - editorRect.top}px`;
+        this.menu.style.visibility = 'visible';
     }
 
     setCurrentAbortController(controller: AbortController): void {
@@ -248,8 +317,11 @@ export const slashCommandPlugin = ViewPlugin.fromClass(class {
 
     destroy(): void {
         this.destroyed = true;
-        this.editorDom.removeEventListener('click', this.handleEditorClick);
+        this.editorDom.removeEventListener('mousedown', this.handleEditorPointerDown, true);
         document.removeEventListener('click', this.handleDocumentClick);
+        window.removeEventListener('resize', this.handleViewportChange);
+        window.visualViewport?.removeEventListener('resize', this.handleViewportChange);
+        window.visualViewport?.removeEventListener('scroll', this.handleViewportChange);
         this.menu.remove();
         this.abortAIContinuation();
     }
