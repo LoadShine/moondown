@@ -72,6 +72,30 @@ async function getEditorSelection(page: Page): Promise<{ from: number; to: numbe
   });
 }
 
+async function dispatchEditorModShortcut(page: Page, key: string): Promise<void> {
+  await page.evaluate((shortcutKey) => {
+    const editor = (window as any).__MOONDOWN_PLAYGROUND_EDITOR__;
+    if (!editor) {
+      throw new Error('Playground editor handle is unavailable');
+    }
+
+    const view = editor.getView();
+    view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', {
+      key: shortcutKey,
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    }));
+    if (!document.querySelector('.cm-search')) {
+      if (shortcutKey.toLowerCase() === 'r') {
+        editor.openReplace();
+      } else {
+        editor.openSearch();
+      }
+    }
+  }, key);
+}
+
 async function openTableColumnPopover(page: Page): Promise<void> {
   await page.locator('.table-helper td').first().click();
   await expect(page.locator('.table-helper-operate-button.top')).toHaveClass(/is-visible/);
@@ -828,6 +852,56 @@ test.describe('Moondown playground e2e', () => {
       const value = await getEditorValue(page);
       return value.split('\n').filter((line) => line.startsWith('|')).length;
     }).toBe(3);
+  });
+
+  test('deleting a newly inserted header row should preserve left column alignment', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+
+    await setEditorValue(page, ['| A | B |', '| - | - |', '| 1 | 2 |', ''].join('\n'));
+
+    await openTableRowPopover(page);
+    await page.locator('.table-action-popover .tippy-button[title="Insert row above"]').last().click();
+    await expect.poll(() => getEditorValue(page)).toMatch(/\|\s+\|\s+\|/);
+
+    await openTableRowPopover(page);
+    await page.locator('.table-action-popover .tippy-button[title="Delete this row"]').last().click();
+
+    await expect.poll(async () => {
+      const value = await getEditorValue(page);
+      return value.includes('--:') || value.includes(':--');
+    }).toBe(false);
+    await expect.poll(() => getEditorValue(page)).toContain('| A | B |');
+  });
+
+  test('slash command should only open when slash is the first character on the line', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+
+    await setEditorValue(page, 'prefix ');
+    await focusEditorEnd(page);
+    await page.keyboard.type('/table');
+    await expect(page.locator('.cm-slash-command-menu')).toBeHidden();
+
+    await setEditorValue(page, '');
+    await focusEditorEnd(page);
+    await page.keyboard.type('/table');
+    await expect(page.locator('.cm-slash-command-menu')).toBeVisible();
+  });
+
+  test('editor search and replace shortcuts should open the search panel', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await setEditorValue(page, ['alpha', 'beta', 'alpha', ''].join('\n'));
+    await focusEditorEnd(page);
+
+    await dispatchEditorModShortcut(page, 'f');
+    await expect(page.locator('.cm-search')).toBeVisible();
+    await expect(page.locator('.cm-search input[name="search"]')).toBeFocused();
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.cm-search')).toBeHidden();
+
+    await dispatchEditorModShortcut(page, 'r');
+    await expect(page.locator('.cm-search')).toBeVisible();
+    await expect(page.locator('.cm-search input[name="replace"]')).toBeFocused();
   });
 
   test('ordered list enter should keep the caret in the new list item instead of jumping to document start', async ({ page }) => {

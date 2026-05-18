@@ -5,6 +5,7 @@ import { markdown } from '@codemirror/lang-markdown';
 import { defaultKeymap, history, historyKeymap, indentWithTab, redo, undo } from "@codemirror/commands";
 import { closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
 import { languages } from "@codemirror/language-data";
+import { openSearchPanel, search, searchKeymap } from "@codemirror/search";
 import { GFM } from "@lezer/markdown";
 
 // Import custom extensions
@@ -37,6 +38,16 @@ import {
 } from './runtime/editor-runtime-state';
 import { wysiwygExtensions } from './runtime/wysiwyg-extensions';
 
+function openReplacePanel(view: EditorView): boolean {
+    const opened = openSearchPanel(view);
+    requestAnimationFrame(() => {
+        const replaceField = view.dom.querySelector<HTMLInputElement>('.cm-search input[name="replace"]');
+        replaceField?.focus();
+        replaceField?.select();
+    });
+    return opened;
+}
+
 export function createDefaultExtensions(): Extension[] {
     return [
         history({ minDepth: 200 }),
@@ -46,9 +57,12 @@ export function createDefaultExtensions(): Extension[] {
             { key: 'Mod-Shift-z', run: redo, preventDefault: true },
             { key: 'Ctrl-Shift-z', run: redo, preventDefault: true },
             { key: 'Ctrl-y', run: redo, preventDefault: true },
+            { key: 'Mod-f', run: openSearchPanel, preventDefault: true },
+            { key: 'Mod-r', run: openReplacePanel, preventDefault: true },
         ])),
         rectangularSelection(),
         indentOnInput(),
+        search({ top: true }),
 
         slashCommand(),
         correctList(),
@@ -67,6 +81,7 @@ export function createDefaultExtensions(): Extension[] {
         keymap.of([
             indentWithTab,
             ...defaultKeymap,
+            ...searchKeymap,
             ...completionKeymap,
             ...historyKeymap,
             ...closeBracketsKeymap,

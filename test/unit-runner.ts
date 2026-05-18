@@ -78,6 +78,7 @@ import {
 import { TableEditorEdgeButtons } from '../src/extensions/table/table-editor-edge-buttons';
 import { TableEditorModel } from '../src/extensions/table/table-editor-model';
 import { rebuildEditableTableDom, selectEditableCell } from '../src/extensions/table/table-editor-dom';
+import { parseMarkdownTable } from '../src/extensions/table/table-functions';
 import {
   moveToNextCell,
   moveToNextRow,
@@ -338,7 +339,7 @@ describe('moondown node:test suite', () => {
     assert.equal(commandExecuted, 1);
   });
 
-  test('slash command helpers: should normalize divider selection and support unicode filter text', () => {
+  test('slash command helpers: should normalize divider selection and only match at line start', () => {
     const commands = resolveSlashCommands([]);
     const dividerIndex = commands.findIndex((command) => command.isDivider);
     assert.notEqual(dividerIndex, -1);
@@ -354,8 +355,9 @@ describe('moondown node:test suite', () => {
     assert.equal(previousSelectable >= 0, true);
     assert.equal(commands[previousSelectable].isDivider, undefined);
 
-    const slashMatch = SLASH_COMMAND_FILTER_REGEX.exec('输入 /公式');
+    const slashMatch = SLASH_COMMAND_FILTER_REGEX.exec('/公式');
     assert.equal(slashMatch?.[1], '公式');
+    assert.equal(SLASH_COMMAND_FILTER_REGEX.exec('输入 /公式'), null);
     assert.equal(SLASH_COMMAND_FILTER_REGEX.exec('输入 公式'), null);
   });
 
@@ -747,6 +749,26 @@ describe('moondown node:test suite', () => {
     assert.equal(moveToPreviousCell({ rowIndex: 0, colIndex: 0 }, 2), null);
     assert.deepEqual(moveToNextRow({ rowIndex: 0, colIndex: 1 }), { rowIndex: 1, colIndex: 1 });
     assert.deepEqual(moveToPreviousRow({ rowIndex: 1, colIndex: 1 }), { rowIndex: 0, colIndex: 1 });
+  });
+
+  test('table parser: should not treat a blank header row as an alignment delimiter', () => {
+    const parsed = parseMarkdownTable([
+      '|  |  |',
+      '|--|--|',
+      '| A | B |',
+      '| 1 | 2 |',
+      '',
+    ].join('\n'));
+
+    assert.ok(parsed);
+    assert.deepEqual(parsed.colAlignments, ['left', 'left']);
+
+    const model = new TableEditorModel(parsed.ast, parsed.colAlignments);
+    assert.equal(model.removeRow(0), true);
+
+    const markdown = buildPipeTable(model.getTableData(), model.getAlignments());
+    assert.equal(markdown.includes('--:'), false);
+    assert.equal(markdown.includes('| A | B |'), true);
   });
 
   test('table editor dom helpers: should rebuild dom and select cells safely', () => {

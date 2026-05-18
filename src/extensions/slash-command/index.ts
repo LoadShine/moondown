@@ -19,9 +19,13 @@ export function slashCommand(): Extension {
         EditorView.domEventHandlers({
             keydown(event, view) {
                 if (event.key === "/" && !view.state.facet(EditorState.readOnly)) {
-                    view.dispatch({
-                        effects: toggleSlashCommand.of(true)
-                    })
+                    const selection = view.state.selection.main;
+                    const line = view.state.doc.lineAt(selection.from);
+                    if (selection.empty && selection.from === line.from) {
+                        view.dispatch({
+                            effects: toggleSlashCommand.of(true)
+                        })
+                    }
                 }
                 // Handle Escape key globally
                 if (event.key === "Escape") {

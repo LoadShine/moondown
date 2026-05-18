@@ -50,18 +50,19 @@ export function parseTableNode(node: SyntaxNode, markdown: string): Table {
             continue
         }
 
-        // The plus indicates a special Pandoc-type of pipe table
+        // The plus indicates a special Pandoc-type of pipe table.
         const splitter = normalizedLine.includes('+') ? '+' : '|'
-        astNode.alignment = normalizedLine.split(splitter)
-            // NOTE: |-|-| will result in ['', '-', '-', ''] -> filter out
+        const cells = normalizedLine
+            .split(splitter)
+            // NOTE: |-|-| will result in ['', '-', '-', ''] -> filter out.
             .filter(c => c.length > 0)
+
+        if (cells.length === 0 || !cells.every(c => /^:?-+:?$/.test(c))) {
+            continue
+        }
+
+        astNode.alignment = cells
             .map(c => {
-                if (c.startsWith('|')) {
-                    c = c.substring(1)
-                }
-                if (c.endsWith('|')) {
-                    c = c.substring(0, c.length - 1)
-                }
                 if (c.startsWith(':') && c.endsWith(':')) {
                     return 'center'
                 } else if (c.endsWith(':')) {

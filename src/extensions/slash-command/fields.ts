@@ -1,6 +1,6 @@
 import {StateEffect, StateField} from "@codemirror/state";
 
-export const SLASH_COMMAND_FILTER_REGEX = /\/([^\s/]*)$/u;
+export const SLASH_COMMAND_FILTER_REGEX = /^\/([^\s/]*)$/u;
 
 /**
  * A StateEffect used to explicitly toggle the visibility of the slash command menu.
@@ -42,7 +42,7 @@ export const slashCommandState = StateField.define<{
             const match = SLASH_COMMAND_FILTER_REGEX.exec(lineText)
             const cursorPos = tr.selection.main.from - line.from
 
-            if (match && (cursorPos === line.text.length || (cursorPos === 0 && lineText.trim() === ""))) {
+            if (match && cursorPos === lineText.length) {
                 return {
                     active: true,
                     filterText: match[1],

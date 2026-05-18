@@ -1,4 +1,5 @@
 import type { EditorView } from '@codemirror/view';
+import { openSearchPanel } from '@codemirror/search';
 import type { AIStreamHandler, EditorConfig, MoondownTranslations, Theme } from '../core';
 import { normalizeEditorConfig, resolveInitialDocument } from './config/normalize-editor-config';
 import { EditorRuntime } from './runtime/editor-runtime';
@@ -66,6 +67,19 @@ export class MoondownEditor {
 
     focus(): void {
         this.runtime.focus();
+    }
+
+    openSearch(): void {
+        openSearchPanel(this.view);
+    }
+
+    openReplace(): void {
+        openSearchPanel(this.view);
+        requestAnimationFrame(() => {
+            const replaceField = this.view.dom.querySelector<HTMLInputElement>('.cm-search input[name="replace"]');
+            replaceField?.focus();
+            replaceField?.select();
+        });
     }
 
     destroy(): void {
