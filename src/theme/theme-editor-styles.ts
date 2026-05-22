@@ -225,8 +225,9 @@ export function buildEditorStyles(options: BuildEditorStylesOptions): EditorThem
         // Horizontal Rule Styling
         '.cm-hr-line': {
             position: 'relative',
-            margin: '1.5em 0',
-            height: '2px',
+            margin: 0,
+            minHeight: '2.75em',
+            lineHeight: '2.75em',
             '&::after': {
                 content: '""',
                 position: 'absolute',

@@ -72,6 +72,18 @@ async function getEditorSelection(page: Page): Promise<{ from: number; to: numbe
   });
 }
 
+async function getEditorSelectionLineNumber(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const editor = (window as any).__MOONDOWN_PLAYGROUND_EDITOR__;
+    if (!editor) {
+      throw new Error('Playground editor handle is unavailable');
+    }
+
+    const view = editor.getView();
+    return view.state.doc.lineAt(view.state.selection.main.from).number;
+  });
+}
+
 async function dispatchEditorModShortcut(page: Page, key: string): Promise<void> {
   await page.evaluate((shortcutKey) => {
     const editor = (window as any).__MOONDOWN_PLAYGROUND_EDITOR__;
@@ -1214,6 +1226,61 @@ test.describe('Moondown playground e2e', () => {
     });
 
     expect(hiddenMarkerDisplayValues).not.toContain('none');
+  });
+
+  test('clicking lines after a hidden horizontal rule should keep caret on the clicked line', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await setEditorValue(page, [
+      'Before the rule',
+      '',
+      '---',
+      '',
+      'after line one',
+      'after line two',
+      'after line three',
+      'after line four',
+      '',
+    ].join('\n'));
+
+    const horizontalRuleMargins = await page.locator('#editor .cm-line.cm-hr-line').evaluate((line) => {
+      const styles = getComputedStyle(line);
+      return {
+        marginTop: Number.parseFloat(styles.marginTop),
+        marginBottom: Number.parseFloat(styles.marginBottom),
+      };
+    });
+    expect(horizontalRuleMargins).toEqual({ marginTop: 0, marginBottom: 0 });
+
+    for (const expectedLine of [5, 6, 7, 8]) {
+      const lineBox = await page.locator('#editor .cm-line').nth(expectedLine - 1).boundingBox();
+      if (!lineBox) throw new Error(`Line ${expectedLine} box is unavailable`);
+
+      await page.mouse.click(lineBox.x + Math.min(24, lineBox.width / 2), lineBox.y + lineBox.height / 2);
+      await expect.poll(() => getEditorSelectionLineNumber(page)).toBe(expectedLine);
+    }
+  });
+
+  test('table insert actions should focus the inserted row or column cell after markdown save', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await setEditorValue(page, ['| A | B |', '| - | - |', '| 1 | 2 |', ''].join('\n'));
+
+    await page.locator('.table-helper td').nth(2).click();
+    await expect(page.locator('.table-helper-operate-button.left')).toHaveClass(/is-visible/);
+    await page.locator('.table-helper-operate-button.left').click();
+    await page.locator('.table-action-popover .tippy-button[title="Insert row below"]').last().click();
+    await expect.poll(async () => page.locator('.table-helper td:focus').evaluate((cell) => ({
+      rowIndex: (cell.parentElement as HTMLTableRowElement).rowIndex,
+      cellIndex: (cell as HTMLTableCellElement).cellIndex,
+    }))).toEqual({ rowIndex: 2, cellIndex: 0 });
+
+    await page.locator('.table-helper td').nth(2).click();
+    await expect(page.locator('.table-helper-operate-button.top')).toHaveClass(/is-visible/);
+    await page.locator('.table-helper-operate-button.top').click();
+    await page.locator('.table-action-popover .tippy-button[title="Insert column to the right"]').last().click();
+    await expect.poll(async () => page.locator('.table-helper td:focus').evaluate((cell) => ({
+      rowIndex: (cell.parentElement as HTMLTableRowElement).rowIndex,
+      cellIndex: (cell as HTMLTableCellElement).cellIndex,
+    }))).toEqual({ rowIndex: 1, cellIndex: 1 });
   });
 
   test('latex widget should preserve source line breaks without internal scrollbars', async ({ page }) => {

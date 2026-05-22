@@ -1,6 +1,6 @@
 import buildPipeTable from './build-pipe.ts';
 import computeCSS from './compute-css.ts';
-import type { ColAlignment, TableEditorOptions } from './types.ts';
+import type { ColAlignment, TableCellPosition, TableEditorOptions } from './types.ts';
 import { md2html } from './markdown-to-html.ts';
 import { TABLE_CSS_CLASSES, TABLE_SIZING } from './constants';
 import { TableEditorActionsPopover } from './table-editor-actions-popover';
@@ -362,6 +362,13 @@ export default class TableEditor {
 
     getMarkdownTable(): string {
         return buildPipeTable(this._model.getTableData(), this._model.getAlignments());
+    }
+
+    getActiveCellPosition(): TableCellPosition {
+        return {
+            rowIndex: this._rowIndex,
+            cellIndex: this._cellIndex,
+        };
     }
 
     markClean(): void {

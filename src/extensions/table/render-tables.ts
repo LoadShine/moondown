@@ -33,10 +33,10 @@ class TableWidget extends WidgetType {
             const editor = createTableEditorFromMarkdown(this.table, {
                 readOnly: this.readOnly,
                 onBlur: (instance) => {
-                    this.saveContent(view, instance);
+                    this.saveContent(view, instance, false);
                 },
                 saveIntent: (instance) => {
-                    this.saveContent(view, instance);
+                    this.saveContent(view, instance, true);
                 },
                 container: view.scrollDOM,
             });
@@ -76,7 +76,7 @@ class TableWidget extends WidgetType {
         this.domElement = null;
     }
 
-    private saveContent(view: EditorView, editor: TableEditor): void {
+    private saveContent(view: EditorView, editor: TableEditor, restoreFocus: boolean): void {
         this.saveController.save(view, editor, {
             widgetId: this.widgetId,
             originalRange: {
@@ -84,6 +84,7 @@ class TableWidget extends WidgetType {
                 to: this.originalTo,
             },
             tableDom: this.domElement,
+            restoreFocus,
         });
     }
 }

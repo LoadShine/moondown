@@ -1,6 +1,7 @@
 import type { EditorView } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
 import type TableEditor from './table-editor.ts';
+import { selectEditableCell } from './table-editor-dom.ts';
 import { tablePositions, updateTablePosition } from './table-position.ts';
 import {
     findTableRangeByDom,
@@ -8,11 +9,13 @@ import {
     isTableRangeValid,
     type TableRange,
 } from './table-widget-position.ts';
+import type { TableCellPosition } from './types.ts';
 
 interface TableWidgetSaveContext {
     widgetId: number;
     originalRange: TableRange;
     tableDom: HTMLElement | null;
+    restoreFocus?: boolean;
 }
 
 export class TableWidgetSaveController {
@@ -27,6 +30,7 @@ export class TableWidgetSaveController {
 
         try {
             const content = editor.getMarkdownTable();
+            const focusTarget = context.restoreFocus ? editor.getActiveCellPosition() : null;
             const range = this.resolveRange(view, context);
             if (!range) {
                 return;
@@ -46,11 +50,44 @@ export class TableWidgetSaveController {
             });
 
             editor.markClean();
+
+            if (focusTarget) {
+                this.restoreCellFocus(view, range.from, focusTarget);
+            }
         } catch (error) {
             console.error('Error saving table content:', error);
         } finally {
             this.saveInProgress = false;
         }
+    }
+
+    private restoreCellFocus(view: EditorView, tableFrom: number, target: TableCellPosition): void {
+        const focus = () => {
+            const table =
+                view.scrollDOM.querySelector<HTMLTableElement>(`table.table-helper[data-original-from="${tableFrom}"]`) ??
+                view.scrollDOM.querySelector<HTMLTableElement>('table.table-helper');
+
+            if (!table || table.rows.length === 0) {
+                return;
+            }
+
+            const rowIndex = Math.min(target.rowIndex, table.rows.length - 1);
+            const cellCount = table.rows[rowIndex]?.cells.length ?? 0;
+            if (cellCount === 0) {
+                return;
+            }
+
+            selectEditableCell({
+                table,
+                rowIndex,
+                cellIndex: Math.min(target.cellIndex, cellCount - 1),
+                where: 'start',
+                forceFocus: true,
+            });
+        };
+
+        requestAnimationFrame(focus);
+        window.setTimeout(focus, 0);
     }
 
     private resolveRange(view: EditorView, context: TableWidgetSaveContext): TableRange | null {

@@ -13,6 +13,11 @@ import type TableEditor from './table-editor.ts'
 
 export type ColAlignment = 'center'|'left'|'right'
 
+export interface TableCellPosition {
+    rowIndex: number
+    cellIndex: number
+}
+
 export interface ParsedTable {
     ast: string[][]
     colAlignments: ColAlignment[]
