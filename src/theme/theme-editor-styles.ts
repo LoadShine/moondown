@@ -122,7 +122,7 @@ export function buildEditorStyles(options: BuildEditorStylesOptions): EditorThem
         },
 
         // Syntax hiding
-        '.cm-hidden-markdown': { display: 'none' },
+        '.cm-hidden-markdown': {},
         '.cm-visible-markdown, .cm-meta': {
             color: visibleMarkdownColor,
             opacity: '1',
@@ -258,16 +258,17 @@ export function buildEditorStyles(options: BuildEditorStylesOptions): EditorThem
         ...buildBlockquoteLevelStyles(),
 
         // Code block styling
-        '.cm-fenced-code': {
+        '.cm-line.cm-fenced-code': {
             backgroundColor: 'transparent',
             position: 'relative',
             color: colors.codeText,
             fontFamily: codeFont,
             padding: '4px 16px',
+            boxSizing: 'border-box',
             fontSize: '13px',
             lineHeight: '1.7',
         },
-        '.cm-fenced-code::before': {
+        '.cm-line.cm-fenced-code::before': {
             content: '""',
             position: 'absolute',
             inset: 0,
@@ -275,9 +276,14 @@ export function buildEditorStyles(options: BuildEditorStylesOptions): EditorThem
             borderRadius: 0,
             zIndex: -1,
         },
-        '.cm-fenced-code:has(.cm-mermaid-widget)::before, .cm-fenced-code:has(.cm-latex-widget)::before': {
+        '.cm-line.cm-fenced-code:has(.cm-mermaid-widget)::before, .cm-line.cm-fenced-code:has(.cm-latex-widget)::before': {
             content: 'none',
             display: 'none',
+        },
+
+        '.cm-blockquote-line[data-bq-level].cm-fenced-code': {
+            paddingLeft: 'calc(var(--bq-padding-base) + (var(--data-bq-level, 1) - 1) * (var(--bq-bar-width) + var(--bq-bar-gap)) + var(--bq-bar-width) + var(--bq-text-gap) + 16px)',
+            paddingRight: '16px',
         },
 
         '.cm-blockquote-line[data-bq-level].cm-fenced-code::before': {

@@ -219,10 +219,9 @@ test.describe('Moondown playground e2e', () => {
 
   test('slash menu should open when typing /', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await focusEditorEnd(page);
 
     const editorContent = page.locator('#editor .cm-content');
-    await editorContent.click();
-    await editorContent.press('End');
     await editorContent.type('\n/');
 
     const slashMenu = page.locator('.cm-slash-command-menu');
@@ -1173,6 +1172,48 @@ test.describe('Moondown playground e2e', () => {
     expect(styles.normalBeforeBorderRadius).toBe('0px');
     expect(styles.mermaidBeforeDisplay).toBe('none');
     expect(styles.latexBeforeDisplay).toBe('none');
+  });
+
+  test('fenced code content should keep inset when host styles reset line padding', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.addStyleTag({ content: '.consumer-line-reset .cm-line { padding: 0; }' });
+    await page.evaluate(() => {
+      document.querySelector('#editor')?.classList.add('consumer-line-reset');
+    });
+    await setEditorValue(page, [
+      '```js',
+      'const inset = "readable";',
+      '```',
+      '',
+    ].join('\n'));
+
+    const paddingLeft = await page.evaluate(() => {
+      const codeLine = document.querySelector('.consumer-line-reset .cm-line.cm-fenced-code') as HTMLElement | null;
+      if (!codeLine) throw new Error('Fenced code line not found');
+      return Number.parseFloat(getComputedStyle(codeLine).paddingLeft);
+    });
+
+    expect(paddingLeft).toBeGreaterThanOrEqual(12);
+  });
+
+  test('syntax hiding should not use display none marker spans that break coordinate mapping', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await setEditorValue(page, [
+      '# Hidden marker heading',
+      '',
+      'Clicking **bold text** and *italic text* should keep the caret aligned.',
+      '',
+    ].join('\n'));
+
+    const hiddenMarkerDisplayValues = await page.evaluate(() => {
+      const editor = (window as any).__MOONDOWN_PLAYGROUND_EDITOR__;
+      const view = editor?.getView?.();
+      view?.focus();
+      return Array.from(document.querySelectorAll<HTMLElement>('.cm-hidden-markdown'))
+        .map((element) => getComputedStyle(element).display);
+    });
+
+    expect(hiddenMarkerDisplayValues).not.toContain('none');
   });
 
   test('latex widget should preserve source line breaks without internal scrollbars', async ({ page }) => {

@@ -8,7 +8,7 @@ import type { DecorationItem, HandlerContext } from './types';
 /**
  * Decoration types with explicit startSide values.
  */
-const hiddenMarkdown = Decoration.mark({ class: CSS_CLASSES.HIDDEN_MARKDOWN });
+const hiddenMarkdown = Decoration.replace({});
 const visibleMarkdown = Decoration.mark({ class: CSS_CLASSES.VISIBLE_MARKDOWN });
 
 /**
