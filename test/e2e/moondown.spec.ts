@@ -1260,6 +1260,64 @@ test.describe('Moondown playground e2e', () => {
     }
   });
 
+  test('mouse hit testing should stay exact across repeated hidden rules and inline markers', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await setEditorValue(page, [
+      '# Hit Testing Stress',
+      '',
+      'Intro **bold** and *italic* text before the first rule.',
+      '---',
+      'dash after line one',
+      'dash after line two with [link](https://example.com/a_(b)).',
+      '',
+      '***',
+      'star after line one',
+      'star after line two with `inline code` marker.',
+      '',
+      '___',
+      'underscore after line one',
+      'underscore after line two with ==mark== and ~~strike~~.',
+      '',
+      '> quoted rule follows',
+      '> ---',
+      '> quoted after line one',
+      '> quoted after line two with **strong** marker.',
+      '',
+      '1. ordered before nested markers',
+      '2. ordered after nested markers',
+      '3. ordered tail',
+      '',
+    ].join('\n'));
+
+    const clickTargets = await page.locator('#editor .cm-line').evaluateAll((lines) => {
+      return lines.map((line, index) => ({
+        lineNumber: index + 1,
+        text: line.textContent ?? '',
+      })).filter((line) => line.text.trim().length > 0);
+    });
+
+    expect(clickTargets.length).toBeGreaterThan(15);
+
+    for (const target of clickTargets) {
+      const line = page.locator('#editor .cm-line').nth(target.lineNumber - 1);
+      await line.scrollIntoViewIfNeeded();
+      const lineBox = await line.boundingBox();
+      if (!lineBox) throw new Error(`Line ${target.lineNumber} box is unavailable`);
+
+      const positions = [
+        lineBox.x + 4,
+        lineBox.x + Math.min(Math.max(lineBox.width / 2, 8), Math.max(lineBox.width - 4, 4)),
+      ];
+
+      for (const x of positions) {
+        await page.mouse.click(x, lineBox.y + lineBox.height / 2);
+        await expect.poll(() => getEditorSelectionLineNumber(page), {
+          message: `Clicking line ${target.lineNumber} (${target.text}) should keep caret on that line`,
+        }).toBe(target.lineNumber);
+      }
+    }
+  });
+
   test('table insert actions should focus the inserted row or column cell after markdown save', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await setEditorValue(page, ['| A | B |', '| - | - |', '| 1 | 2 |', ''].join('\n'));
@@ -1281,6 +1339,58 @@ test.describe('Moondown playground e2e', () => {
       rowIndex: (cell.parentElement as HTMLTableRowElement).rowIndex,
       cellIndex: (cell as HTMLTableCellElement).cellIndex,
     }))).toEqual({ rowIndex: 1, cellIndex: 1 });
+  });
+
+  test('repeated table insertions should keep focus and typing in the newly inserted cell', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await setEditorValue(page, ['| A | B | C |', '| - | - | - |', '| 1 | 2 | 3 |', '| 4 | 5 | 6 |', ''].join('\n'));
+
+    await page.locator('.table-helper td').nth(4).click();
+    await expect(page.locator('.table-helper-operate-button.left')).toHaveClass(/is-visible/);
+    await page.locator('.table-helper-operate-button.left').click();
+    await page.locator('.table-action-popover .tippy-button[title="Insert row above"]').last().click();
+    await expect.poll(async () => page.locator('.table-helper td:focus').evaluate((cell) => ({
+      rowIndex: (cell.parentElement as HTMLTableRowElement).rowIndex,
+      cellIndex: (cell as HTMLTableCellElement).cellIndex,
+    }))).toEqual({ rowIndex: 1, cellIndex: 1 });
+    await page.keyboard.type('inserted-above');
+    await expect(page.locator('.table-helper td:focus')).toHaveText('inserted-above');
+
+    await page.locator('.table-helper-operate-button.top').click();
+    await page.locator('.table-action-popover .tippy-button[title="Insert column to the left"]').last().click();
+    await expect.poll(async () => page.locator('.table-helper td:focus').evaluate((cell) => ({
+      rowIndex: (cell.parentElement as HTMLTableRowElement).rowIndex,
+      cellIndex: (cell as HTMLTableCellElement).cellIndex,
+    }))).toEqual({ rowIndex: 1, cellIndex: 1 });
+    await page.keyboard.type('inserted-left');
+    await expect(page.locator('.table-helper td:focus')).toHaveText('inserted-left');
+
+    await page.locator('.table-helper-operate-button.left').click();
+    await page.locator('.table-action-popover .tippy-button[title="Insert row below"]').last().click();
+    await expect.poll(async () => page.locator('.table-helper td:focus').evaluate((cell) => ({
+      rowIndex: (cell.parentElement as HTMLTableRowElement).rowIndex,
+      cellIndex: (cell as HTMLTableCellElement).cellIndex,
+    }))).toEqual({ rowIndex: 2, cellIndex: 1 });
+    await page.keyboard.type('inserted-below');
+    await expect(page.locator('.table-helper td:focus')).toHaveText('inserted-below');
+
+    await page.locator('.table-helper-operate-button.top').click();
+    await page.locator('.table-action-popover .tippy-button[title="Insert column to the right"]').last().click();
+    await expect.poll(async () => page.locator('.table-helper td:focus').evaluate((cell) => ({
+      rowIndex: (cell.parentElement as HTMLTableRowElement).rowIndex,
+      cellIndex: (cell as HTMLTableCellElement).cellIndex,
+    }))).toEqual({ rowIndex: 2, cellIndex: 2 });
+    await page.keyboard.type('inserted-right');
+    await expect(page.locator('.table-helper td:focus')).toHaveText('inserted-right');
+    await page.locator('body').click({ position: { x: 5, y: 5 } });
+
+    await expect.poll(async () => {
+      const value = await getEditorValue(page);
+      return value.split('\n').map((line) => line.replace(/\s+/g, ' ').trim());
+    }).toEqual(expect.arrayContaining([
+      '| | inserted-left | | inserted-above | |',
+      '| | inserted-below | inserted-right | | |',
+    ]));
   });
 
   test('latex widget should preserve source line breaks without internal scrollbars', async ({ page }) => {

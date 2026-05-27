@@ -76,6 +76,7 @@ import {
   resolveAIPolishTargetLanguage,
 } from '../src/extensions/bubble-menu/ai-polish-prompts';
 import { TableEditorEdgeButtons } from '../src/extensions/table/table-editor-edge-buttons';
+import TableEditor from '../src/extensions/table/table-editor';
 import { TableEditorModel } from '../src/extensions/table/table-editor-model';
 import { rebuildEditableTableDom, selectEditableCell } from '../src/extensions/table/table-editor-dom';
 import { parseMarkdownTable } from '../src/extensions/table/table-functions';
@@ -112,10 +113,14 @@ describe('moondown node:test suite', () => {
     g.HTMLButtonElement = dom.window.HTMLButtonElement;
     g.HTMLSpanElement = dom.window.HTMLSpanElement;
     g.HTMLImageElement = dom.window.HTMLImageElement;
+    g.HTMLTableCellElement = dom.window.HTMLTableCellElement;
+    g.HTMLTableRowElement = dom.window.HTMLTableRowElement;
     g.DOMRect = dom.window.DOMRect;
     g.MouseEvent = dom.window.MouseEvent;
     g.Node = dom.window.Node;
     g.Window = dom.window.Window;
+    g.AbortController = dom.window.AbortController;
+    g.AbortSignal = dom.window.AbortSignal;
     g.MutationObserver = dom.window.MutationObserver;
     Object.defineProperty(g, 'navigator', {
       value: dom.window.navigator,
@@ -152,10 +157,14 @@ describe('moondown node:test suite', () => {
     delete g.HTMLButtonElement;
     delete g.HTMLSpanElement;
     delete g.HTMLImageElement;
+    delete g.HTMLTableCellElement;
+    delete g.HTMLTableRowElement;
     delete g.DOMRect;
     delete g.MouseEvent;
     delete g.Node;
     delete g.Window;
+    delete g.AbortController;
+    delete g.AbortSignal;
     delete g.MutationObserver;
     delete g.ResizeObserver;
     delete g.requestAnimationFrame;
@@ -749,6 +758,30 @@ describe('moondown node:test suite', () => {
     assert.equal(moveToPreviousCell({ rowIndex: 0, colIndex: 0 }, 2), null);
     assert.deepEqual(moveToNextRow({ rowIndex: 0, colIndex: 1 }), { rowIndex: 1, colIndex: 1 });
     assert.deepEqual(moveToPreviousRow({ rowIndex: 1, colIndex: 1 }), { rowIndex: 0, colIndex: 1 });
+  });
+
+  test('table editor: should preserve active cell input before structural mutations', () => {
+    const editor = new TableEditor(
+      [
+        ['A', 'B'],
+        ['1', '2'],
+      ],
+      ['left', 'left']
+    );
+    document.body.appendChild(editor.domElement);
+
+    const cell = editor.domElement.rows[1].cells[0] as HTMLTableCellElement;
+    cell.focus();
+    cell.textContent = 'draft value';
+    cell.dispatchEvent(new window.Event('input', { bubbles: true }));
+
+    editor.appendCol(0);
+
+    const markdown = editor.getMarkdownTable();
+    assert.equal(markdown.includes('| draft value |  | 2 |'), true);
+
+    editor.destroy();
+    editor.domElement.remove();
   });
 
   test('table parser: should not treat a blank header row as an alignment delimiter', () => {

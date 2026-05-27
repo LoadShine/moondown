@@ -211,6 +211,7 @@ export default class TableEditor {
             readOnly: this._options.readOnly,
             onCellFocus: (cell) => this._onCellFocus(cell),
             onCellBlur: (cell) => this._onCellBlur(cell),
+            onCellInput: (cell) => this._onCellInput(cell),
             onCellKeyDown: (event, cell) => this._onCellKeyDown(event, cell),
         });
         this._eventLock = false;
@@ -230,14 +231,11 @@ export default class TableEditor {
             this._pendingBlur = null;
         }
 
-        const col = cell.cellIndex;
-        const row = (cell.parentElement as HTMLTableRowElement).rowIndex;
-
-        const newContent = cell.textContent ?? '';
-        this._model.setCell(row, col, newContent);
-        cell.innerHTML = md2html(newContent);
-
-        this._signalContentChange();
+        this._syncCellContent(cell);
+        cell.innerHTML = md2html(this._model.getCell(
+            (cell.parentElement as HTMLTableRowElement).rowIndex,
+            cell.cellIndex
+        ));
 
         this._pendingBlur = window.setTimeout(() => {
             this._pendingBlur = null;
@@ -272,6 +270,43 @@ export default class TableEditor {
         this._cellIndex = col;
 
         this._showEdgeButtons();
+    }
+
+    _onCellInput(cell: HTMLTableCellElement): void {
+        if (this._eventLock || this._options.readOnly) {
+            return;
+        }
+
+        this._syncCellContent(cell);
+    }
+
+    private _syncCellContent(cell: HTMLTableCellElement): void {
+        if (!this._elem.contains(cell)) {
+            return;
+        }
+
+        const col = cell.cellIndex;
+        const row = (cell.parentElement as HTMLTableRowElement).rowIndex;
+        const newContent = cell.textContent ?? '';
+
+        this._rowIndex = row;
+        this._cellIndex = col;
+
+        if (this._model.getCell(row, col) === newContent) {
+            return;
+        }
+
+        this._model.setCell(row, col, newContent);
+        this._signalContentChange();
+    }
+
+    private _syncActiveCellContent(): void {
+        const activeElement = document.activeElement;
+        if (!(activeElement instanceof HTMLTableCellElement) || !this._elem.contains(activeElement)) {
+            return;
+        }
+
+        this._syncCellContent(activeElement);
     }
 
     _onCellKeyDown(event: KeyboardEvent, cell: HTMLTableCellElement): void {
@@ -361,6 +396,7 @@ export default class TableEditor {
     }
 
     getMarkdownTable(): string {
+        this._syncActiveCellContent();
         return buildPipeTable(this._model.getTableData(), this._model.getAlignments());
     }
 
@@ -469,6 +505,7 @@ export default class TableEditor {
         if (this._options.readOnly) {
             return;
         }
+        this._syncActiveCellContent();
         this._cellIndex = colIndex;
         this._model.prependColumn(this._cellIndex);
         this._rebuildDOMElement({ select: 'start', forceFocus: true });
@@ -479,6 +516,7 @@ export default class TableEditor {
         if (this._options.readOnly) {
             return;
         }
+        this._syncActiveCellContent();
         this._cellIndex = colIndex;
         this._model.appendColumn(this._cellIndex);
         this._cellIndex += 1;
@@ -490,6 +528,7 @@ export default class TableEditor {
         if (this._options.readOnly) {
             return;
         }
+        this._syncActiveCellContent();
         this._rowIndex = rowIndex;
         this._model.prependRow(this._rowIndex);
         this._rebuildDOMElement({ select: 'start', forceFocus: true });
@@ -500,6 +539,7 @@ export default class TableEditor {
         if (this._options.readOnly) {
             return;
         }
+        this._syncActiveCellContent();
         this._rowIndex = rowIndex;
         this._model.appendRow(this._rowIndex);
         this._rowIndex += 1;
@@ -512,6 +552,7 @@ export default class TableEditor {
         if (this._options.readOnly) {
             return;
         }
+        this._syncActiveCellContent();
         this._rowIndex = rowIndex;
         const rowToRemove = this._rowIndex;
         const firstRow = rowToRemove === 0;
@@ -531,6 +572,7 @@ export default class TableEditor {
         if (this._options.readOnly) {
             return;
         }
+        this._syncActiveCellContent();
         this._cellIndex = colIndex;
         const colToRemove = this._cellIndex;
         const firstCol = colToRemove === 0;
@@ -550,6 +592,7 @@ export default class TableEditor {
         if (this._options.readOnly) {
             return;
         }
+        this._syncActiveCellContent();
         this._model.updateColumnAlignment(col, alignment);
 
         for (let row = 0; row < this._model.rows; row += 1) {

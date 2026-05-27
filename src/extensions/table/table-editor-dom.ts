@@ -10,11 +10,12 @@ interface RebuildEditableTableDomOptions {
     readOnly?: boolean;
     onCellFocus: (cell: HTMLTableCellElement) => void;
     onCellBlur: (cell: HTMLTableCellElement) => void;
+    onCellInput?: (cell: HTMLTableCellElement) => void;
     onCellKeyDown?: (event: KeyboardEvent, cell: HTMLTableCellElement) => void;
 }
 
 export function rebuildEditableTableDom(options: RebuildEditableTableDomOptions): void {
-    const { table, model, readOnly = false, onCellFocus, onCellBlur, onCellKeyDown } = options;
+    const { table, model, readOnly = false, onCellFocus, onCellBlur, onCellInput, onCellKeyDown } = options;
     table.innerHTML = '';
     const tbody = table.createTBody();
 
@@ -38,6 +39,10 @@ export function rebuildEditableTableDom(options: RebuildEditableTableDomOptions)
 
             cell.addEventListener('blur', () => {
                 onCellBlur(cell);
+            });
+
+            cell.addEventListener('input', () => {
+                onCellInput?.(cell);
             });
 
             cell.addEventListener('keydown', (event) => {
