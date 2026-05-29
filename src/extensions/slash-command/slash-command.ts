@@ -273,13 +273,32 @@ export const slashCommandPlugin = ViewPlugin.fromClass(class {
         const menuRect = this.menu.getBoundingClientRect();
         const gap = 6;
         const margin = 8;
+        const visualViewport = window.visualViewport;
+        const viewportRect = {
+            left: visualViewport?.offsetLeft ?? 0,
+            top: visualViewport?.offsetTop ?? 0,
+            right: (visualViewport?.offsetLeft ?? 0) + (visualViewport?.width ?? window.innerWidth),
+            bottom: (visualViewport?.offsetTop ?? 0) + (visualViewport?.height ?? window.innerHeight),
+        };
+        const boundaryRect = {
+            left: Math.max(scrollRect.left, viewportRect.left),
+            top: Math.max(scrollRect.top, viewportRect.top),
+            right: Math.min(scrollRect.right, viewportRect.right),
+            bottom: Math.min(scrollRect.bottom, viewportRect.bottom),
+        };
+        if (boundaryRect.right <= boundaryRect.left || boundaryRect.bottom <= boundaryRect.top) {
+            boundaryRect.left = viewportRect.left;
+            boundaryRect.top = viewportRect.top;
+            boundaryRect.right = viewportRect.right;
+            boundaryRect.bottom = viewportRect.bottom;
+        }
 
-        const minLeft = scrollRect.left + margin;
-        const maxLeft = Math.max(minLeft, scrollRect.right - menuRect.width - margin);
+        const minLeft = boundaryRect.left + margin;
+        const maxLeft = Math.max(minLeft, boundaryRect.right - menuRect.width - margin);
         const viewportLeft = Math.min(maxLeft, Math.max(minLeft, coords.left));
 
-        const spaceBelow = Math.max(0, scrollRect.bottom - coords.bottom - gap - margin);
-        const spaceAbove = Math.max(0, coords.top - scrollRect.top - gap - margin);
+        const spaceBelow = Math.max(0, boundaryRect.bottom - coords.bottom - gap - margin);
+        const spaceAbove = Math.max(0, coords.top - boundaryRect.top - gap - margin);
         const openAbove = spaceBelow < menuRect.height && spaceAbove > spaceBelow;
         const availableHeight = openAbove ? spaceAbove : spaceBelow;
         const constrainedHeight = Math.min(maxMenuHeight, Math.max(minMenuHeight, availableHeight));
@@ -291,8 +310,8 @@ export const slashCommandPlugin = ViewPlugin.fromClass(class {
             : coords.bottom + gap;
 
         viewportTop = Math.min(
-            Math.max(scrollRect.top + margin, viewportTop),
-            Math.max(scrollRect.top + margin, scrollRect.bottom - menuHeight - margin)
+            Math.max(boundaryRect.top + margin, viewportTop),
+            Math.max(boundaryRect.top + margin, boundaryRect.bottom - menuHeight - margin)
         );
 
         this.menu.style.left = `${viewportLeft - editorRect.left}px`;

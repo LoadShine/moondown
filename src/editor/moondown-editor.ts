@@ -1,6 +1,6 @@
 import type { EditorView } from '@codemirror/view';
-import { openSearchPanel } from '@codemirror/search';
 import type { AIStreamHandler, EditorConfig, MoondownTranslations, Theme } from '../core';
+import { openVisibleSearchPanel } from '../extensions/search-panel-visibility';
 import { normalizeEditorConfig, resolveInitialDocument } from './config/normalize-editor-config';
 import { EditorRuntime } from './runtime/editor-runtime';
 
@@ -70,11 +70,11 @@ export class MoondownEditor {
     }
 
     openSearch(): void {
-        openSearchPanel(this.view);
+        openVisibleSearchPanel(this.view);
     }
 
     openReplace(): void {
-        openSearchPanel(this.view);
+        openVisibleSearchPanel(this.view);
         requestAnimationFrame(() => {
             const replaceField = this.view.dom.querySelector<HTMLInputElement>('.cm-search input[name="replace"]');
             replaceField?.focus();

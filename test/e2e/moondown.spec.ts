@@ -122,6 +122,34 @@ async function openTableRowPopover(page: Page): Promise<void> {
   await expect(page.locator('.table-action-popover .tippy-button[title="Insert row below"]').last()).toBeVisible();
 }
 
+async function expectElementInsideViewport(page: Page, selector: string): Promise<void> {
+  await expect.poll(async () => {
+    const box = await page.locator(selector).first().evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+      };
+    });
+
+    const isInside =
+      box.width > 0 &&
+      box.height > 0 &&
+      box.left >= -0.5 &&
+      box.top >= -0.5 &&
+      box.right <= box.viewportWidth + 0.5 &&
+      box.bottom <= box.viewportHeight + 0.5;
+
+    return isInside ? 'inside' : JSON.stringify(box);
+  }, { message: `${selector} should stay inside the viewport` }).toBe('inside');
+}
+
 test.describe('Moondown playground e2e', () => {
   test('page should load and render editor', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
@@ -1535,6 +1563,107 @@ test.describe('Moondown playground e2e', () => {
     expect(counts.mermaidCount).toBeGreaterThan(0);
     expect(counts.latexCount).toBeGreaterThan(0);
     expect(counts.imageCount).toBeGreaterThan(0);
+    expect(badLogs).toEqual([]);
+  });
+
+  test('chaotic mixed editor operations should keep hit targets, overlays, and content stable', async ({ page }) => {
+    const badLogs: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'warning' || message.type() === 'error') {
+        badLogs.push(`${message.type()}: ${message.text()}`);
+      }
+    });
+    page.on('pageerror', (error) => {
+      badLogs.push(`pageerror: ${error.message}`);
+    });
+
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await setEditorValue(page, [
+      '# Chaos',
+      '',
+      'alpha before rule with **bold** and *italic* markers',
+      '---',
+      'alpha after rule one',
+      'alpha after rule two with [link](https://example.com/a_(b))',
+      '',
+      '| A | B | C |',
+      '| - | - | - |',
+      '| 1 | 2 | 3 |',
+      '| 4 | 5 | 6 |',
+      '',
+      '> Quote with --- text',
+      '',
+      '```mermaid',
+      'flowchart TD',
+      '  A-->B',
+      '```',
+      '',
+      '```latex',
+      '\\\\frac{a}{b}',
+      '```',
+      '',
+      'tail',
+      '',
+    ].join('\n'));
+
+    for (let index = 0; index < 3; index += 1) {
+      await page.locator('#toggleSyntax').uncheck();
+      await page.locator('#toggleSyntax').check();
+    }
+
+    for (const viewport of [
+      { width: 390, height: 740 },
+      { width: 1440, height: 900 },
+      { width: 768, height: 600 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.waitForTimeout(120);
+
+      for (const expectedLine of [5, 6]) {
+        const line = page.locator('#editor .cm-line').nth(expectedLine - 1);
+        await line.scrollIntoViewIfNeeded();
+        const lineBox = await line.boundingBox();
+        if (!lineBox) throw new Error(`Line ${expectedLine} box is unavailable`);
+        await page.mouse.click(lineBox.x + Math.min(32, lineBox.width / 2), lineBox.y + lineBox.height / 2);
+        await expect.poll(() => getEditorSelectionLineNumber(page), {
+          message: `Viewport ${viewport.width}x${viewport.height} should click line ${expectedLine} exactly`,
+        }).toBe(expectedLine);
+      }
+
+      await focusEditorAtText(page, 'tail', 'tail'.length);
+      await page.keyboard.type('\n/table');
+      await expect(page.locator('.cm-slash-command-menu')).toBeVisible();
+      await expectElementInsideViewport(page, '.cm-slash-command-menu');
+      await page.keyboard.press('Escape');
+
+      await dispatchEditorModShortcut(page, 'f');
+      await expect(page.locator('.cm-search')).toBeVisible();
+      await expectElementInsideViewport(page, '.cm-search');
+      await page.locator('.cm-search input[name="search"]').fill('alpha after');
+      await expect(page.locator('.cm-searchMatch')).toHaveCount(2);
+      await page.keyboard.press('Escape');
+
+      await page.locator('.table-helper td').nth(4).click();
+      await expect(page.locator('.table-helper-operate-button.top')).toHaveClass(/is-visible/);
+      await page.locator('.table-helper-operate-button.top').click();
+      await expect(page.locator('.table-action-popover')).toBeVisible();
+      await expectElementInsideViewport(page, '.table-action-popover');
+      await expect(page.locator('.table-action-popover')).toHaveCount(1);
+      await page.keyboard.press('Escape');
+
+      await page.locator('.table-helper-operate-button.left').click();
+      await expect(page.locator('.table-action-popover')).toBeVisible();
+      await expectElementInsideViewport(page, '.table-action-popover');
+      await expect(page.locator('.table-action-popover')).toHaveCount(1);
+      await page.keyboard.press('Escape');
+    }
+
+    await focusEditorAtText(page, 'alpha after rule two', 'alpha after rule two'.length);
+    await page.keyboard.type(' edited');
+    await expect.poll(() => getEditorValue(page)).toContain('alpha after rule two edited');
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Z' : 'Control+Z');
+    await expect.poll(() => getEditorValue(page)).not.toContain('alpha after rule two edited');
+    await expect.poll(() => getEditorValue(page)).toContain('alpha after rule two');
     expect(badLogs).toEqual([]);
   });
 

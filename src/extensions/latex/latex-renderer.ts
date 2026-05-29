@@ -120,7 +120,7 @@ async function renderLatexInto(target: HTMLElement, definition: string): Promise
     const renderOptions: KatexRenderOptions = {
         displayMode: true,
         throwOnError: false,
-        strict: 'warn',
+        strict: 'ignore',
         output: 'mathml',
         trust: false,
     };
