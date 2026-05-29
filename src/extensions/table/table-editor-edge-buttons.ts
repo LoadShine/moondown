@@ -17,6 +17,7 @@ const OFFSCREEN_POSITION = '-1000px';
 const BUTTON_OFFSET_SCALE = 0.6;
 const CENTER_SCALE = 1.2;
 const EDGE_BUTTON_SPACING = 5;
+const VIEWPORT_MARGIN = 4;
 const VISIBLE_CLASS = 'is-visible';
 
 function isPointInsideExpandedRect({ event, table, edgeButtonSize }: TableBoundsOptions): boolean {
@@ -39,6 +40,13 @@ function createEdgeButton(className: string, symbol: string): HTMLDivElement {
     button.classList.add(TABLE_CSS_CLASSES.OPERATE_BUTTON, className);
     button.innerHTML = symbol;
     return button;
+}
+
+function clamp(value: number, min: number, max: number): number {
+    if (max < min) {
+        return min;
+    }
+    return Math.min(max, Math.max(min, value));
 }
 
 export class TableEditorEdgeButtons {
@@ -101,6 +109,13 @@ export class TableEditorEdgeButtons {
 
         const scrollTop = window.scrollY || document.documentElement.scrollTop;
         const scrollLeft = window.scrollX || document.documentElement.scrollLeft;
+        const visualViewport = window.visualViewport;
+        const viewportLeft = visualViewport?.offsetLeft ?? 0;
+        const viewportRight = viewportLeft + (visualViewport?.width ?? window.innerWidth);
+        const topButtonWidth = this.edgeButtonSize * CENTER_SCALE;
+        const leftButtonWidth = this.edgeButtonSize * BUTTON_OFFSET_SCALE;
+        const minVisibleLeft = Math.max(containerRect.left, viewportLeft) + VIEWPORT_MARGIN;
+        const maxVisibleLeft = Math.min(containerRect.right, viewportRight) - VIEWPORT_MARGIN;
 
         const cellIsOnScreen = cellRect.top > containerRect.top && cellRect.bottom < containerRect.bottom;
 
@@ -110,15 +125,21 @@ export class TableEditorEdgeButtons {
         }
 
         const topButtonTop = scrollTop + columnTop - this.edgeButtonSize * BUTTON_OFFSET_SCALE - EDGE_BUTTON_SPACING;
-        const topButtonLeft =
-            scrollLeft + cellRect.left + cellRect.width / 2 - (this.edgeButtonSize * CENTER_SCALE) / 2;
+        const topButtonLeft = scrollLeft + clamp(
+            cellRect.left + cellRect.width / 2 - topButtonWidth / 2,
+            minVisibleLeft,
+            maxVisibleLeft - topButtonWidth,
+        );
         this.addTopButton.style.top = `${topButtonTop}px`;
         this.addTopButton.style.left = `${topButtonLeft}px`;
 
         const leftButtonTop =
             scrollTop + rowRect.top + rowRect.height / 2 - (this.edgeButtonSize * CENTER_SCALE) / 2;
-        const leftButtonLeft =
-            scrollLeft + rowRect.left - this.edgeButtonSize * BUTTON_OFFSET_SCALE - EDGE_BUTTON_SPACING;
+        const leftButtonLeft = scrollLeft + clamp(
+            rowRect.left - leftButtonWidth - EDGE_BUTTON_SPACING,
+            minVisibleLeft,
+            maxVisibleLeft - leftButtonWidth,
+        );
         this.addLeftButton.style.top = `${leftButtonTop}px`;
         this.addLeftButton.style.left = `${leftButtonLeft}px`;
     }

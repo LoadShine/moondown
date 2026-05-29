@@ -1369,6 +1369,50 @@ test.describe('Moondown playground e2e', () => {
     }))).toEqual({ rowIndex: 1, cellIndex: 1 });
   });
 
+  test('table row action button should stay clickable when the host has a left rail', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.setViewportSize({ width: 390, height: 740 });
+    await page.addStyleTag({
+      content: `
+        #editor {
+          width: 260px;
+          margin-left: 80px;
+        }
+        .host-left-rail {
+          position: fixed;
+          inset: 0 auto 0 0;
+          z-index: 1000;
+          width: 80px;
+          pointer-events: auto;
+        }
+      `,
+    });
+    await page.evaluate(() => {
+      const rail = document.createElement('div');
+      rail.className = 'host-left-rail';
+      document.body.append(rail);
+    });
+    await setEditorValue(page, ['| A | B | C |', '| - | - | - |', '| 1 | 2 | 3 |', '| 4 | 5 | 6 |', ''].join('\n'));
+
+    await page.locator('.table-helper td').nth(4).click();
+    await expect(page.locator('.table-helper-operate-button.left')).toHaveClass(/is-visible/);
+
+    const hitTarget = await page.locator('.table-helper-operate-button.left').evaluate((button) => {
+      const rect = button.getBoundingClientRect();
+      const target = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2) as HTMLElement | null;
+      return {
+        left: rect.left,
+        targetClassName: target?.className?.toString() ?? '',
+      };
+    });
+
+    expect(hitTarget.left).toBeGreaterThanOrEqual(84);
+    expect(hitTarget.targetClassName).toContain('table-helper-operate-button');
+
+    await page.locator('.table-helper-operate-button.left').click();
+    await expect(page.locator('.table-action-popover .tippy-button[title="Insert row below"]').last()).toBeVisible();
+  });
+
   test('repeated table insertions should keep focus and typing in the newly inserted cell', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await setEditorValue(page, ['| A | B | C |', '| - | - | - |', '| 1 | 2 | 3 |', '| 4 | 5 | 6 |', ''].join('\n'));
