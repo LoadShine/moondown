@@ -1,6 +1,6 @@
 {
   "name": "moondown",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "Headless Markdown editor built on CodeMirror 6 with widgets, slash commands, tables, and AI hooks.",
   "packageManager": "pnpm@10.33.0",
   "type": "module",

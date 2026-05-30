@@ -4,6 +4,7 @@ import type TableEditor from './table-editor.ts';
 import { selectEditableCell } from './table-editor-dom.ts';
 import { tablePositions, updateTablePosition } from './table-position.ts';
 import {
+    collectTableRanges,
     findTableRangeByDom,
     isDocumentRangeInside,
     isTableRangeValid,
@@ -97,12 +98,18 @@ export class TableWidgetSaveController {
         }
 
         if (!context.tableDom) {
+            if (!this.documentStillContainsTables(view)) {
+                return null;
+            }
             console.error('Cannot resolve table position without DOM element.', { widgetId: context.widgetId });
             return null;
         }
 
         const fallbackRange = findTableRangeByDom(view, context.tableDom);
         if (!fallbackRange) {
+            if (!this.documentStillContainsTables(view)) {
+                return null;
+            }
             console.error('Cannot find table position from DOM fallback.', { widgetId: context.widgetId });
             return null;
         }
@@ -134,5 +141,9 @@ export class TableWidgetSaveController {
             from: position.from,
             to: position.to,
         };
+    }
+
+    private documentStillContainsTables(view: EditorView): boolean {
+        return collectTableRanges(view.state).length > 0;
     }
 }
