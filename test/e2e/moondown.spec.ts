@@ -1465,6 +1465,40 @@ test.describe('Moondown playground e2e', () => {
     ]));
   });
 
+  test('typing in an inserted table cell should save on editor destroy without console errors', async ({ page }) => {
+    const badLogs: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'warning' || message.type() === 'error') {
+        badLogs.push(`${message.type()}: ${message.text()}`);
+      }
+    });
+    page.on('pageerror', (error) => {
+      badLogs.push(`pageerror: ${error.message}`);
+    });
+
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await setEditorValue(page, ['| A | B | C |', '| - | - | - |', '| 1 | 2 | 3 |', '| 4 | 5 | 6 |', ''].join('\n'));
+
+    await page.locator('.table-helper td').nth(4).click();
+    await expect(page.locator('.table-helper-operate-button.left')).toHaveClass(/is-visible/);
+    await page.locator('.table-helper-operate-button.left').click();
+    await page.locator('.table-action-popover .tippy-button[title="Insert row below"]').last().click();
+    await expect.poll(async () => page.locator('.table-helper td:focus').evaluate((cell) => ({
+      rowIndex: (cell.parentElement as HTMLTableRowElement).rowIndex,
+      cellIndex: (cell as HTMLTableCellElement).cellIndex,
+    }))).toEqual({ rowIndex: 2, cellIndex: 1 });
+
+    await page.keyboard.type('new-cell');
+    await expect(page.locator('.table-helper td:focus')).toHaveText('new-cell');
+    const valueAfterDestroy = await page.evaluate(() => {
+      const editor = (window as any).__MOONDOWN_PLAYGROUND_EDITOR__;
+      editor.destroy();
+      return editor.getValue();
+    });
+    expect(valueAfterDestroy).toMatch(/\|\s+\|\s+new-cell\s+\|\s+\|/);
+    expect(badLogs).toEqual([]);
+  });
+
   test('latex widget should preserve source line breaks without internal scrollbars', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await setEditorValue(page, [

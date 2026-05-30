@@ -41,6 +41,7 @@ export default class TableEditor {
     private _pendingBlur: number | null = null;
     private _floatingControlSyncTimer: number | null = null;
     private _resizeObserver: ResizeObserver | null = null;
+    private _isDestroying = false;
     private readonly _lifecycle = new AbortController();
 
     private readonly _options: TableEditorOptions;
@@ -620,10 +621,18 @@ export default class TableEditor {
     }
 
     destroy(): void {
+        if (this._isDestroying) {
+            return;
+        }
+        this._isDestroying = true;
+
         this._lifecycle.abort();
         if (this._pendingBlur !== null) {
             window.clearTimeout(this._pendingBlur);
             this._pendingBlur = null;
+        }
+        if (!this._options.readOnly && !this._isClean) {
+            this._options.onBlur?.(this);
         }
         if (this._floatingControlSyncTimer !== null) {
             window.clearTimeout(this._floatingControlSyncTimer);
